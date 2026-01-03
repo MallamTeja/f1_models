@@ -175,7 +175,7 @@ model = models.Sequential([
     layers.Dense(1)
 ])
 
-model.compile(
+model.compile(      
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.005),
     loss="mae"
 )
@@ -207,26 +207,6 @@ for i in range(5):
 y_pred = model.predict(X_test).ravel()
 print(f"Model Error (MAE): {mean_absolute_error(y_test, y_pred):.2f} seconds")
 
-background = X_train[
-    np.random.choice(X_train.shape[0], min(10, X_train.shape[0]), replace=False)
-]
 
-explainer = shap.KernelExplainer(
-    model.predict,
-    background
-)
 
-shap_values = explainer.shap_values(X_test, nsamples=100)
-
-shap.summary_plot(
-    shap_values,
-    X_test,
-    feature_names=[
-        "QualifyingTime",
-        "CleanAirRacePace",
-        "TotalSectorTime",
-        "TeamPerformanceScore",
-        "RainProbability",
-        "Temperature"
-    ]
-)
+model.save("abu_dhabi_ffnmodel.keras")
