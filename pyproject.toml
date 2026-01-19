@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "f1_race_winner_predictor"
+version = "0.1.0"
+description = "F1 Race Winner Prediction API"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+zip-safe = false
