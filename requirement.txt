@@ -1,6 +1,6 @@
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
+unicorn[standard]==0.24.0
 pydantic==2.5.0
-scikit-learn==1.5.0
+scikit-learn==1.3.2
 numpy==1.24.4
 joblib==1.3.2
