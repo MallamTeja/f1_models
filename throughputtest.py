@@ -4,11 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 print("LOAD TEST STARTED")
 
-URL = "https://r14-k1ow.onrender.com/predict"
+URL = "https://www.f1predictor.tech/predict"
 
 rain_prob = 0.2
 temperature = 30
-
 
 drivers_data = [
     {"driver": "RUS", "qual": 82.645, "pace": 91.70},
@@ -43,11 +42,9 @@ for _ in range(REPEAT_PER_DRIVER):
 
 TOTAL_REQUESTS = len(requests_payloads)
 
-
 def send_request(payload):
     r = requests.post(URL, json=payload, timeout=15)
     return r.status_code
-
 
 start_time = time.time()
 
@@ -55,12 +52,7 @@ success = 0
 fail = 0
 
 with ThreadPoolExecutor(max_workers=CONCURRENT_USERS) as executor:
-
-    futures = [
-        executor.submit(send_request, payload)
-        for payload in requests_payloads
-    ]
-
+    futures = [executor.submit(send_request, payload) for payload in requests_payloads]
     for future in as_completed(futures):
         try:
             status = future.result()
@@ -71,13 +63,9 @@ with ThreadPoolExecutor(max_workers=CONCURRENT_USERS) as executor:
         except Exception:
             fail += 1
 
-
 end_time = time.time()
-
 total_time = end_time - start_time
-
 throughput = TOTAL_REQUESTS / total_time
-
 
 print("\n===== DRIVER LOAD TEST RESULTS =====")
 print("Drivers tested:", len(drivers_data))
@@ -87,4 +75,4 @@ print("Successful:", success)
 print("Failed:", fail)
 print("Total Time:", round(total_time, 2), "seconds")
 print("Throughput:", round(throughput, 2), "req/sec")
-print("===================================\n")
+print("===================================")
