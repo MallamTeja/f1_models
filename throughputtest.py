@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 print("LOAD TEST STARTED")
 
-URL = "https://www.f1predictor.tech/predict"
+URL = "http://localhost:8000/predict"
 
 rain_prob = 0.2
 temperature = 30
