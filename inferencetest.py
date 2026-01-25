@@ -1,7 +1,9 @@
 import time
 import requests
 
-URL = "https://www.f1predictor.tech/predict"
+URL = "http://localhost:8000/predict"
+
+
 
 def predict_position(driver_code, qualifying_time, clean_air_race_pace, rain_prob=0.2, temperature=30):
     payload = {
@@ -81,7 +83,8 @@ total_time = end_time - start_time
 avg_inference_time = sum(inference_times) / len(inference_times) if inference_times else 0
 min_inference_time = min(inference_times) if inference_times else 0
 max_inference_time = max(inference_times) if inference_times else 0
-throughput = len(drivers_data) / total_time
+
+
 
 print("\n===== API INFERENCE METRICS =====")
 print("Successful:", success)
@@ -91,7 +94,7 @@ print("Total API call time:", f"{total_time:.2f} seconds")
 print("Average inference time:", f"{avg_inference_time*1000:.2f} ms")
 print("Min inference time:", f"{min_inference_time*1000:.2f} ms")
 print("Max inference time:", f"{max_inference_time*1000:.2f} ms")
-print("Throughput:", f"{throughput:.2f} predictions/sec")
+
 print("==================================\n")
 
 print("Individual Results:")

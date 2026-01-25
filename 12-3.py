@@ -12,7 +12,6 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
 
-
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
 
@@ -170,11 +169,5 @@ shap.summary_plot(
 plt.tight_layout()
 plt.show()
 
-import json
-
-
-model_json = model.get_booster().save_raw()
-with open("abu_dhabi_model.json", "wb") as f:
-    f.write(model_json)
-
+model.get_booster().save_model("abu_dhabi_model.json")
 print("abu_dhabi_model.json saved successfully")
