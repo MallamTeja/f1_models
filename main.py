@@ -24,6 +24,15 @@ async def lifespan(app: FastAPI):
             print("Model loaded.")
         except Exception as e:
             print(f"Error loading model: {e}")
+          
+            try:
+                with open("abu_dhabi_model.json", "rb") as f:
+                    booster = xgb.Booster()
+                    booster.load_model(f)
+                    ml_models["f1_model"] = booster
+                    print("Model loaded as binary.")
+            except Exception as e2:
+                print(f"Error loading model as binary: {e2}")
 
 
     if os.path.exists("lookup_data.json"):
