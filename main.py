@@ -17,10 +17,14 @@ lookup_data = {}
 async def lifespan(app: FastAPI):
 
     if os.path.exists("abu_dhabi_model.json"):
-        booster = xgb.Booster()
-        booster.load_model("abu_dhabi_model.json")
-        ml_models["f1_model"] = booster
-        print("Model loaded.")
+        try:
+            booster = xgb.Booster()
+            booster.load_model("abu_dhabi_model.json")
+            ml_models["f1_model"] = booster
+            print("Model loaded.")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+
 
     if os.path.exists("lookup_data.json"):
         with open("lookup_data.json", "r") as f:
@@ -98,7 +102,4 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "model_loaded": "f1_model" in ml_models
-    }
+    return {"status": "healthy", "model_loaded": "f1_model" in ml_models}
