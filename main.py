@@ -8,10 +8,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-
-ml_models = {}
+ml_models = {}1
 lookup_data = {}
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,6 +65,7 @@ async def predict(input_data: PredictionInput):
     start_time = time.time()
 
     model = ml_models.get("f1_model")
+
 
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
