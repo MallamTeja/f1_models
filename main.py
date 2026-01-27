@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-ml_models = {}1
+ml_models = {}
 lookup_data = {}
 
 @asynccontextmanager
