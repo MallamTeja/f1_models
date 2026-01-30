@@ -3,8 +3,6 @@ import requests
 
 URL = "http://localhost:8000/predict"
 
-
-
 def predict_position(driver_code, qualifying_time, clean_air_race_pace, rain_prob=0.2, temperature=30):
     payload = {
         "driver_code": driver_code,
@@ -13,7 +11,6 @@ def predict_position(driver_code, qualifying_time, clean_air_race_pace, rain_pro
         "rain_prob": rain_prob,
         "temperature": temperature
     }
-    
     try:
         start_time = time.time()
         response = requests.post(URL, json=payload, timeout=15)
@@ -83,8 +80,6 @@ total_time = end_time - start_time
 avg_inference_time = sum(inference_times) / len(inference_times) if inference_times else 0
 min_inference_time = min(inference_times) if inference_times else 0
 max_inference_time = max(inference_times) if inference_times else 0
-
-
 
 print("\n===== API INFERENCE METRICS =====")
 print("Successful:", success)

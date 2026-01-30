@@ -1,6 +1,18 @@
 import pytest
 from fastapi.testclient import TestClient
-from main import app
+from main1 import app, ml_models, lookup_data
+import xgboost as xgb
+import json
+import os
+
+if os.path.exists("abu_dhabi_model.json"):
+    booster = xgb.Booster()
+    booster.load_model("abu_dhabi_model.json")
+    ml_models["f1_model"] = booster
+
+if os.path.exists("lookup_data.json"):
+    with open("lookup_data.json", "r") as f:
+        lookup_data["data"] = json.load(f)
 
 client = TestClient(app)
 
@@ -15,8 +27,6 @@ def test_health_check():
     assert response.json()["status"] == "healthy"
 
 
-
-
 def test_predict_logic():
     payload = {
         "driver_code": "VER",
@@ -28,4 +38,6 @@ def test_predict_logic():
     response = client.post("/predict", json=payload)
     print("STATUS:", response.status_code)
     print("BODY:", response.text)
-    assert False
+    assert response.status_code == 200
+    assert "VER" in response.json()["driver"]
+    assert "predicted_pace" in response.json()
