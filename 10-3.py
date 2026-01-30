@@ -64,40 +64,38 @@ clean_air_race_pace = {
     "ALB": 95.35,
 }
 
-qualifying_2025 = pd.DataFrame(
-    {
-        "Driver": [
-            "RUS",
-            "VER",
-            "PIA",
-            "NOR",
-            "HAM",
-            "LEC",
-            "ALO",
-            "HUL",
-            "ALB",
-            "SAI",
-            "STR",
-            "OCO",
-            "GAS",
-        ],
-        "QualifyingTime": [
-            82.645,
-            82.207,
-            82.437,
-            82.408,
-            83.394,
-            82.730,
-            82.902,
-            83.450,
-            83.416,
-            83.042,
-            83.097,
-            82.913,
-            83.468,
-        ],
-    }
-)
+qualifying_2025 = pd.DataFrame({
+    "Driver": [
+        "RUS",
+        "VER",
+        "PIA",
+        "NOR",
+        "HAM",
+        "LEC",
+        "ALO",
+        "HUL",
+        "ALB",
+        "SAI",
+        "STR",
+        "OCO",
+        "GAS",
+    ],
+    "QualifyingTime": [
+        79.662,
+        79.651,
+        79.387,
+        79.495,
+        80.907,
+        80.561,
+        80.418,
+        80.353,
+        80.629,
+        80.287,
+        81.058,
+        80.864,
+        80.477,
+    ],
+})
 
 qualifying_2025["CleanAirRacePace (s)"] = qualifying_2025["Driver"].map(
     clean_air_race_pace
@@ -118,18 +116,17 @@ rain_probability = forecast.get("pop", 0) if forecast else 0
 temperature = forecast.get("main", {}).get("temp", 20) if forecast else 20
 
 team_points = {
-    "McLaren": 800,
-    "Mercedes": 459,
-    "Red Bull": 426,
-    "Williams": 137,
-    "Ferrari": 382,
-    "Haas": 73,
+    "McLaren": 756,
+    "Mercedes": 431,
+    "Red Bull": 391,
+    "Ferrari": 378,
+    "Williams": 117,
+    "Racing Bulls": 76,
     "Aston Martin": 80,
-    "Kick Sauber": 68,
-    "Racing Bulls": 92,
+    "Haas": 63,
+    "Kick Sauber": 51,
     "Alpine": 22,
 }
-
 driver_to_team = {
     "VER": "Red Bull",
     "NOR": "McLaren",
