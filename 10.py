@@ -6,24 +6,21 @@ import requests
 import joblib
 import shap
 import matplotlib.pyplot as plt
-
 from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
-from xgboost import XGBRegressor
-
+from sklearn.ensemble import GradientBoostingRegressor
 
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
 
-
-
 OPENWEATHER_API = os.getenv("openweatherapi")
-LAT, LON = 24.4672, 54.6031
-FORECAST_TIME = "2025-12-07 13:00:00"
 
-session_2024 = fastf1.get_session(2024, 24, "R")
+LAT, LON = 25.4889, 51.4542
+FORECAST_TIME = "2025-11-30 20:00:00"
+
+session_2024 = fastf1.get_session(2024, 22, "R")
 session_2024.load()
 
 laps_2024 = session_2024.laps[
@@ -33,11 +30,17 @@ laps_2024 = session_2024.laps[
 for col in ["LapTime", "Sector1Time", "Sector2Time", "Sector3Time"]:
     laps_2024[f"{col} (s)"] = laps_2024[col].dt.total_seconds()
 
-sector_times_2024 = laps_2024.groupby("Driver").agg({
-    "Sector1Time (s)": "mean",
-    "Sector2Time (s)": "mean",
-    "Sector3Time (s)": "mean"
-}).reset_index()
+sector_times_2024 = (
+    laps_2024.groupby("Driver")
+    .agg(
+        {
+            "Sector1Time (s)": "mean",
+            "Sector2Time (s)": "mean",
+            "Sector3Time (s)": "mean",
+        }
+    )
+    .reset_index()
+)
 
 sector_times_2024["TotalSectorTime (s)"] = (
     sector_times_2024["Sector1Time (s)"]
@@ -46,51 +49,69 @@ sector_times_2024["TotalSectorTime (s)"] = (
 )
 
 clean_air_race_pace = {
-    "VER": 91.10, 
-    "HAM": 92.05, 
-    "NOR": 91.55,
-    "PIA": 91.35,
-    "STR": 95.10,
-    "ALO": 93.40, 
+    "VER": 91.10,
+    "PIA": 91.95,
     "LEC": 92.30,
-    "SAI": 94.80, 
-    "HUL": 95.20, 
-    "RUS": 91.70,
-    "ALB": 95.35, 
+    "STR": 95.10,
+    "NOR": 91.55,
+    "ALO": 93.40,
+    "SAI": 94.80,
+    "HUL": 95.20,
+    "HAM": 92.05,
+    "GAS": 95.55,
+    "RUS": 93.00,
     "OCO": 95.50,
-    "GAS": 95.55
+    "ALB": 95.35,
 }
 
-qualifying_2025 = pd.DataFrame({
-    "Driver": ["RUS", "VER", "PIA", "NOR", "HAM", "LEC", "ALO", "HUL", "ALB", "SAI", "STR", "OCO", "GAS"],
-    "QualifyingTime": [
-        82.645, 
-        82.207, 
-        82.437, 
-        82.408, 
-        83.394,
-        82.730, 
-        82.902, 
-        83.450, 
-        83.416,
-        83.042, 
-        83.097, 
-        82.913, 
-        83.468
-    ]
-})
+qualifying_2025 = pd.DataFrame(
+    {
+        "Driver": [
+            "RUS",
+            "VER",
+            "PIA",
+            "NOR",
+            "HAM",
+            "LEC",
+            "ALO",
+            "HUL",
+            "ALB",
+            "SAI",
+            "STR",
+            "OCO",
+            "GAS",
+        ],
+        "QualifyingTime": [
+            82.645,
+            82.207,
+            82.437,
+            82.408,
+            83.394,
+            82.730,
+            82.902,
+            83.450,
+            83.416,
+            83.042,
+            83.097,
+            82.913,
+            83.468,
+        ],
+    }
+)
 
-qualifying_2025["CleanAirRacePace (s)"] = qualifying_2025["Driver"].map(clean_air_race_pace)
+qualifying_2025["CleanAirRacePace (s)"] = qualifying_2025["Driver"].map(
+    clean_air_race_pace
+)
 
 weather = requests.get(
-    f"http://api.openweathermap.org/data/2.5/forecast"
+    "http://api.openweathermap.org/data/2.5/forecast"
     f"?lat={LAT}&lon={LON}&appid={OPENWEATHER_API}&units=metric",
-    timeout=10
+    timeout=10,
 ).json()
 
 forecast = next(
     (f for f in weather.get("list", []) if f.get("dt_txt") == FORECAST_TIME),
-    None
+    None,
 )
 
 rain_probability = forecast.get("pop", 0) if forecast else 0
@@ -106,7 +127,7 @@ team_points = {
     "Aston Martin": 80,
     "Kick Sauber": 68,
     "Racing Bulls": 92,
-    "Alpine": 22
+    "Alpine": 22,
 }
 
 driver_to_team = {
@@ -121,21 +142,19 @@ driver_to_team = {
     "SAI": "Williams",
     "HUL": "Kick Sauber",
     "OCO": "Alpine",
-    "STR": "Aston Martin"
+    "STR": "Aston Martin",
 }
 
 team_score = {k: v / max(team_points.values()) for k, v in team_points.items()}
 
 qualifying_2025["TeamPerformanceScore"] = (
-    qualifying_2025["Driver"]
-    .map(driver_to_team)
-    .map(team_score)
+    qualifying_2025["Driver"].map(driver_to_team).map(team_score)
 )
 
 merged_data = qualifying_2025.merge(
     sector_times_2024[["Driver", "TotalSectorTime (s)"]],
     on="Driver",
-    how="left"
+    how="left",
 )
 
 merged_data["RainProbability"] = rain_probability
@@ -151,11 +170,15 @@ X = merged_data[
         "RainProbability",
         "Temperature",
         "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
+        "CleanAirRacePace (s)",
     ]
 ]
 
-y = laps_2024.groupby("Driver")["LapTime (s)"].mean().reindex(merged_data["Driver"])
+y = (
+    laps_2024.groupby("Driver")["LapTime (s)"]
+    .mean()
+    .reindex(merged_data["Driver"])
+)
 
 X = SimpleImputer(strategy="median").fit_transform(X)
 
@@ -163,12 +186,11 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.1, random_state=39
 )
 
-model = XGBRegressor(
+model = GradientBoostingRegressor(
     n_estimators=300,
-    learning_rate=0.9,
+    learning_rate=0.05,
     max_depth=3,
     random_state=39,
-    monotone_constraints="(1, 0, 0, -1, -1)"
 )
 
 model.fit(X_train, y_train)
@@ -176,18 +198,18 @@ model.fit(X_train, y_train)
 merged_data["PredictedLapTime (s)"] = model.predict(X)
 
 top5 = (
-    merged_data
-    .sort_values("PredictedLapTime (s)")
+    merged_data.sort_values("PredictedLapTime (s)")
     .reset_index(drop=True)
     .loc[:4, ["Driver", "PredictedLapTime (s)"]]
 )
-
 top5.index = range(1, 6)
 
-print("\nPredicted Abu Dhabi Race Pace – Top 5")
+print("\nPredicted Qatar 2025 Race Pace – Top 5")
 print(top5)
 
-print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
+print(
+    f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s"
+)
 
 explainer = shap.Explainer(model)
 shap_values = explainer(X_train)
@@ -195,11 +217,8 @@ shap.summary_plot(shap_values, X_train, show=False)
 plt.tight_layout()
 plt.show()
 
-
-
 explainer = shap.Explainer(model, X_train)
 shap_values = explainer(X_train)
-
 shap.summary_plot(
     shap_values,
     X_train,
@@ -208,15 +227,11 @@ shap.summary_plot(
         "RainProbability",
         "Temperature",
         "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
+        "CleanAirRacePace (s)",
     ],
-    show=False
+    show=False,
 )
-
 plt.tight_layout()
 plt.show()
 
-
-
-
-joblib.dump(model, "abudhabiensemblemodel.joblib")
+joblib.dump(model, "qatarmodel.joblib")

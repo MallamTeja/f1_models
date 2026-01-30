@@ -12,4 +12,4 @@ f1_cache/
 *.joblib
 *.keras
 *.pbix
-*.sqlite
+*.sqlite~
