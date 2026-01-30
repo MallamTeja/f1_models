@@ -1,15 +1,7 @@
 __pycache__/
 *.pyc
 .env
-.DS_Store
 .venv/
-*.egg-info/
-dist/
-build/
 
 venv/
 f1_cache/
-*.joblib
-*.keras
-*.pbix
-*.sqlite~
