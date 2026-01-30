@@ -14,6 +14,9 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
+
+
+
 def test_predict_logic():
     payload = {
         "driver_code": "VER",
@@ -23,6 +26,6 @@ def test_predict_logic():
         "temperature": 25.0
     }
     response = client.post("/predict", json=payload)
-    # The model should load if file exists in repo
-    assert response.status_code == 200
-    assert response.json()["driver"] == "VER"
+    print("STATUS:", response.status_code)
+    print("BODY:", response.text)
+    assert False
