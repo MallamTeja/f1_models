@@ -173,6 +173,7 @@ model = models.Sequential([
     layers.Dense(64, activation="relu"),
     layers.Dense(32, activation="relu"),
     layers.Dense(1)
+    
 ])
 
 model.compile(      
@@ -209,4 +210,4 @@ print(f"Model Error (MAE): {mean_absolute_error(y_test, y_pred):.2f} seconds")
 
 
 
-model.save("abu_dhabi_ffnmodel.keras")
+model.save("abudhabiffnmodel.keras")

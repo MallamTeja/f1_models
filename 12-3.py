@@ -3,6 +3,7 @@ import fastf1
 import pandas as pd
 import numpy as np
 import requests
+import joblib
 import shap
 import matplotlib.pyplot as plt
 
@@ -12,8 +13,11 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
 
+
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
+
+
 
 OPENWEATHER_API = os.getenv("openweatherapi")
 LAT, LON = 24.4672, 54.6031
@@ -36,25 +40,43 @@ sector_times_2024 = laps_2024.groupby("Driver").agg({
 }).reset_index()
 
 sector_times_2024["TotalSectorTime (s)"] = (
-    sector_times_2024["Sector1Time (s)"] +
-    sector_times_2024["Sector2Time (s)"] +
-    sector_times_2024["Sector3Time (s)"]
+    sector_times_2024["Sector1Time (s)"]
+    + sector_times_2024["Sector2Time (s)"]
+    + sector_times_2024["Sector3Time (s)"]
 )
 
 clean_air_race_pace = {
-    "VER": 91.10, "PIA": 91.35, "NOR": 91.55,
-    "RUS": 91.70, "HAM": 92.05, "LEC": 92.30,
-    "ALO": 93.40, "SAI": 94.80, "STR": 95.10,
-    "HUL": 95.20, "ALB": 95.35, "OCO": 95.50,
+    "VER": 91.10, 
+    "HAM": 92.05, 
+    "NOR": 91.55,
+    "OCO": 95.50,
+    "PIA": 91.35,
+    "STR": 95.10,
+    "ALO": 93.40, 
+    "LEC": 92.30,
+    "SAI": 94.80, 
+    "HUL": 95.20, 
+    "RUS": 91.70,
+    "ALB": 95.35, 
     "GAS": 95.55
 }
 
 qualifying_2025 = pd.DataFrame({
-    "Driver": ["RUS","VER","PIA","NOR","HAM","LEC","ALO","HUL","ALB","SAI","STR","OCO","GAS"],
+    "Driver": ["RUS", "VER", "PIA", "NOR", "HAM", "LEC", "ALO", "HUL", "ALB", "SAI", "STR", "OCO", "GAS"],
     "QualifyingTime": [
-        82.645,82.207,82.437,82.408,83.394,
-        82.730,82.902,83.450,83.416,
-        83.042,83.097,82.913,83.468
+        82.645, 
+        82.207, 
+        82.437, 
+        82.408, 
+        83.394,
+        82.730, 
+        82.902, 
+        83.450, 
+        83.416,
+        83.042, 
+        83.097, 
+        82.913, 
+        83.468
     ]
 })
 
@@ -75,23 +97,39 @@ rain_probability = forecast.get("pop", 0) if forecast else 0
 temperature = forecast.get("main", {}).get("temp", 20) if forecast else 20
 
 team_points = {
-    "McLaren": 800, "Mercedes": 459, "Red Bull": 426,
-    "Williams": 137, "Ferrari": 382, "Haas": 73,
-    "Aston Martin": 80, "Kick Sauber": 68,
-    "Racing Bulls": 92, "Alpine": 22
+    "McLaren": 800,
+    "Mercedes": 459,
+    "Red Bull": 426,
+    "Williams": 137,
+    "Ferrari": 382,
+    "Haas": 73,
+    "Aston Martin": 80,
+    "Kick Sauber": 68,
+    "Racing Bulls": 92,
+    "Alpine": 22
 }
 
 driver_to_team = {
-    "VER":"Red Bull","NOR":"McLaren","PIA":"McLaren",
-    "LEC":"Ferrari","RUS":"Mercedes","HAM":"Ferrari",
-    "GAS":"Alpine","ALO":"Aston Martin","SAI":"Williams",
-    "HUL":"Kick Sauber","OCO":"Alpine","STR":"Aston Martin"
+    "VER": "Red Bull",
+    "NOR": "McLaren",
+    "PIA": "McLaren",
+    "LEC": "Ferrari",
+    "RUS": "Mercedes",
+    "HAM": "Ferrari",
+    "GAS": "Alpine",
+    "ALO": "Aston Martin",
+    "SAI": "Williams",
+    "HUL": "Kick Sauber",
+    "OCO": "Alpine",
+    "STR": "Aston Martin"
 }
 
 team_score = {k: v / max(team_points.values()) for k, v in team_points.items()}
 
 qualifying_2025["TeamPerformanceScore"] = (
-    qualifying_2025["Driver"].map(driver_to_team).map(team_score)
+    qualifying_2025["Driver"]
+    .map(driver_to_team)
+    .map(team_score)
 )
 
 merged_data = qualifying_2025.merge(
@@ -138,7 +176,8 @@ model.fit(X_train, y_train)
 merged_data["PredictedLapTime (s)"] = model.predict(X)
 
 top5 = (
-    merged_data.sort_values("PredictedLapTime (s)")
+    merged_data
+    .sort_values("PredictedLapTime (s)")
     .reset_index(drop=True)
     .loc[:4, ["Driver", "PredictedLapTime (s)"]]
 )
@@ -151,6 +190,14 @@ print(top5)
 print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
 
 explainer = shap.Explainer(model)
+shap_values = explainer(X_train)
+shap.summary_plot(shap_values, X_train, show=False)
+plt.tight_layout()
+plt.show()
+
+
+
+explainer = shap.Explainer(model, X_train)
 shap_values = explainer(X_train)
 
 shap.summary_plot(
@@ -169,5 +216,6 @@ shap.summary_plot(
 plt.tight_layout()
 plt.show()
 
-model.get_booster().save_model("abu_dhabi_model.json")
-print("abu_dhabi_model.json saved successfully")
+
+model.get_booster().save_model("abudhabimodel.json")
+print("abudhabimodel.json saved successfully")
