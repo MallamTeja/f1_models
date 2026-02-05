@@ -9,7 +9,3 @@ build/
 
 venv/
 f1_cache/
-*.joblib
-*.keras
-*.pbix
-*.sqlite
