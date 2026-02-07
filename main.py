@@ -4,7 +4,7 @@ import json
 import numpy as np
 import xgboost as xgb
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 
 ml_models = {}
@@ -48,11 +48,31 @@ app = FastAPI(
 )
 
 class PredictionInput(BaseModel):
-    driver_code: str
-    qualifying_time: float
-    clean_air_race_pace: float
-    rain_prob: float = 0.0
-    temperature: float = 25.0
+    driver_code: str = Field(
+        min_length=3,
+        max_length=3,
+        description="3-letter F1 driver code (e.g., VER, LEC, ALO)"
+    )
+    qualifying_time: float = Field(
+        gt=0,
+        le=200,
+        description="Qualifying lap time in seconds"
+    )
+    clean_air_race_pace: float = Field(
+        gt=0,
+        le=200,
+        description="Race pace with clean air in seconds"
+    )
+    rain_prob: float = Field(
+        ge=0,
+        le=100,
+        description="Rain probability as percentage (0-100)"
+    )
+    temperature: float = Field(
+        ge=-10,
+        le=70,
+        description="Track temperature in Celsius"
+    )
 
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
@@ -63,7 +83,34 @@ async def predict(input_data: PredictionInput):
         raise HTTPException(status_code=500, detail="Model not loaded")
     
     drivers = lookup_data.get("data", {}).get("drivers", {})
-    team_score = drivers.get(input_data.driver_code.upper(), 0.5)
+    driver_code_upper = input_data.driver_code.upper()
+    
+    if driver_code_upper not in drivers:
+        allowed_drivers = ", ".join(sorted(drivers.keys()))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown driver code '{driver_code_upper}'. Allowed: {allowed_drivers}"
+        )
+    
+    team_score = drivers[driver_code_upper]
+    
+    if not (70 <= input_data.qualifying_time <= 95):
+        raise HTTPException(
+            status_code=422,
+            detail="Qualifying time must be 70-95 seconds (realistic for Abu Dhabi)"
+        )
+    
+    if not (70 <= input_data.clean_air_race_pace <= 95):
+        raise HTTPException(
+            status_code=422,
+            detail="Clean air race pace must be 70-95 seconds"
+        )
+    
+    if input_data.clean_air_race_pace <= input_data.qualifying_time:
+        raise HTTPException(
+            status_code=422,
+            detail="Clean air race pace should be slower than qualifying time"
+        )
     
     features = np.array([[input_data.qualifying_time,input_data.rain_prob,input_data.temperature,team_score,input_data.clean_air_race_pace]])
     
