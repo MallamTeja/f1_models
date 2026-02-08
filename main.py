@@ -77,7 +77,7 @@ class PredictionInput(BaseModel):
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
     start_time = time.time()
-    model = ml_models.get("f1_model")
+    model: Any = ml_models.get("f1_model")
     
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
