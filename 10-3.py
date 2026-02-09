@@ -1,4 +1,5 @@
 import os
+import json
 import fastf1
 import pandas as pd
 import numpy as np
@@ -11,6 +12,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import GradientBoostingRegressor
+
+
 
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
@@ -49,17 +52,17 @@ sector_times_2024["TotalSectorTime (s)"] = (
 )
 
 clean_air_race_pace = {
-    "VER": 91.10,
-    "PIA": 91.95,
-    "LEC": 92.30,
+    "VER": 89.10,
     "STR": 95.10,
+    "PIA": 91.95,
+    "SAI": 95.80,
     "NOR": 91.55,
     "ALO": 93.40,
-    "SAI": 94.80,
+    "LEC": 93.30,
     "HUL": 95.20,
-    "HAM": 92.05,
+    "HAM": 96.05,
+    "RUS": 95.00,
     "GAS": 95.55,
-    "RUS": 93.00,
     "OCO": 95.50,
     "ALB": 95.35,
 }
@@ -82,22 +85,23 @@ qualifying_2025 = pd.DataFrame(
             "GAS",
         ],
         "QualifyingTime": [
-            82.645,
-            82.207,
-            82.437,
-            82.408,
-            83.394,
-            82.730,
-            82.902,
-            83.450,
-            83.416,
-            83.042,
-            83.097,
-            82.913,
-            83.468,
+            79.662,
+            79.651,
+            79.387,
+            79.495,
+            80.907,
+            80.561,
+            80.418,
+            80.353,
+            80.629,
+            80.287,
+            81.058,
+            80.864,
+            80.477,
         ],
     }
 )
+
 
 qualifying_2025["CleanAirRacePace (s)"] = qualifying_2025["Driver"].map(
     clean_air_race_pace
@@ -121,14 +125,15 @@ team_points = {
     "McLaren": 800,
     "Mercedes": 459,
     "Red Bull": 426,
+    "Ferrari": 383,
     "Williams": 137,
-    "Ferrari": 382,
     "Haas": 73,
     "Aston Martin": 80,
     "Kick Sauber": 68,
     "Racing Bulls": 92,
     "Alpine": 22,
 }
+
 
 driver_to_team = {
     "VER": "Red Bull",
@@ -141,7 +146,7 @@ driver_to_team = {
     "ALO": "Aston Martin",
     "SAI": "Williams",
     "HUL": "Kick Sauber",
-    "OCO": "Alpine",
+    "OCO": "Haas",
     "STR": "Aston Martin",
 }
 
@@ -214,8 +219,6 @@ print(
 explainer = shap.Explainer(model)
 shap_values = explainer(X_train)
 shap.summary_plot(shap_values, X_train, show=False)
-plt.tight_layout()
-plt.show()
 
 explainer = shap.Explainer(model, X_train)
 shap_values = explainer(X_train)
@@ -231,9 +234,49 @@ shap.summary_plot(
     ],
     show=False,
 )
-plt.tight_layout()
-plt.show()
 
+def save_model_to_json(model, filepath):
+    model_data = {
+        "n_estimators": model.n_estimators,
+        "learning_rate": model.learning_rate,
+        "max_depth": model.max_depth,
+        "random_state": model.random_state,
+        "estimators": []
+    }
+    
+    if hasattr(model, 'estimators_'):
+        for stage in model.estimators_:
+            stage_trees = []
+            for tree_regressor in stage:
+                tree = tree_regressor.tree_
+                
+                def to_list(arr):
+                    return arr.tolist() if hasattr(arr, 'tolist') else list(arr)
+                
+                tree_data = {
+                    "children_left": to_list(tree.children_left),
+                    "children_right": to_list(tree.children_right),
+                    "feature": to_list(tree.feature),
+                    "threshold": to_list(tree.threshold),
+                    "value": to_list(tree.value), 
+                    "node_count": tree.node_count,
+                }
+                stage_trees.append(tree_data)
+            model_data["estimators"].append(stage_trees)
+    
+    if hasattr(model, 'init_'):
+        try:
+            dummy_input = np.zeros((1, model.n_features_in_))
+            init_val = model.init_.predict(dummy_input)[0]
+            if isinstance(init_val, np.ndarray) or isinstance(init_val, list):
+                 init_val = init_val[0]
+            model_data["init_value"] = float(init_val)
+        except Exception as e:
+            print(f"Warning: Could not save init value: {e}")
+            model_data["init_value"] = 0.0
 
-model.get_booster().save_model("qatarmodel.json")
+    with open(filepath, "w") as f:
+        json.dump(model_data, f, indent=2)
+
+save_model_to_json(model, "qatarmodel.json")
 print("qatarmodel.json saved successfully")

@@ -13,7 +13,6 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
 
-
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
 
@@ -46,17 +45,17 @@ sector_times_2024["TotalSectorTime (s)"] = (
 )
 
 clean_air_race_pace = {
-    "VER": 91.10,
-    "PIA": 91.35,
-    "NOR": 91.55,
-    "RUS": 91.70,
     "HAM": 92.05,
-    "LEC": 92.30,
-    "ALO": 93.40,
-    "SAI": 94.80,
-    "STR": 95.10,
+    "PIA": 91.35,
+    "VER": 91.10,
     "HUL": 95.20,
     "ALB": 95.35,
+    "RUS": 91.70,
+    "NOR": 91.55,
+    "ALO": 93.40,
+    "SAI": 94.80,
+    "LEC": 92.30,
+    "STR": 95.10,
     "OCO": 95.50,
     "GAS": 95.55
 }
