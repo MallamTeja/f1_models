@@ -13,7 +13,7 @@ lookup_data = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if os.path.exists("abu_dhabi_model.json"):
-        try:
+        try:    
             booster = xgb.Booster()
             booster.load_model("abu_dhabi_model.json")
             ml_models["f1_model"] = booster

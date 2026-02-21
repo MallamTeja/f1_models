@@ -170,6 +170,7 @@ model = XGBRegressor(
     monotone_constraints="(1, 0, 0, -1, -1)"
 )
 
+
 model.fit(X_train, y_train)
 
 merged_data["PredictedLapTime (s)"] = model.predict(X)

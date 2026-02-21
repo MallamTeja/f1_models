@@ -15,6 +15,8 @@ from xgboost import XGBRegressor
 load_dotenv()
 fastf1.Cache.enable_cache("f1_cache")
 
+
+
 OPENWEATHER_API = os.getenv("openweatherapi")
 LAT, LON = 24.4672, 54.6031
 FORECAST_TIME = "2025-12-07 13:00:00"
