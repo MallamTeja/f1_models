@@ -20,9 +20,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f requirement.txt ]; then pip install -r requirement.txt; fi
-        SKJ_PATH=$(pip show sklearn-json | grep Location | awk '{print $2}')/sklearn_json
-        find $SKJ_PATH -name "*.py" -exec sed -i 's/, _gb_losses//g' {} +
-    - name: Run tests
+        if [ -f requirement.txt ]; then pip install "scikit-learn<1.6.0" -r requirement.txt; else pip install "scikit-learn<1.6.0"; fi
+    - name: Run testsss
       run: |
         python -m pytest test_main.py
