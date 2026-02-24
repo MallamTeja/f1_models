@@ -22,7 +22,7 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirement.txt ]; then pip install -r requirement.txt; fi
         SKJ_PATH=$(pip show sklearn-json | grep Location | awk '{print $2}')/sklearn_json
-        sed -i 's/, _gb_losses//g' $SKJ_PATH/classification.py $SKJ_PATH/regression.py
+        find $SKJ_PATH -name "*.py" -exec sed -i 's/, _gb_losses//g' {} +
     - name: Run tests
       run: |
         python -m pytest test_main.py
