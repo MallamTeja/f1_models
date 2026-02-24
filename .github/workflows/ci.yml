@@ -20,8 +20,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f req.txt ]; then pip install -r req.txt; fi
         if [ -f requirement.txt ]; then pip install -r requirement.txt; fi
-        pip install pytest httpx fastapi xgboost joblib numpy
     - name: Run tests
-      run: pytest test_main.py
+      run: |
+        python -m pytest test_main.py
