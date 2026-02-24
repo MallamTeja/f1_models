@@ -12,16 +12,16 @@ lookup_data = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if os.path.exists("abu_dhabi_model.json"):
+    if os.path.exists("abudhabi_model.json"):
         try:    
             booster = xgb.Booster()
-            booster.load_model("abu_dhabi_model.json")
+            booster.load_model("abudhabi_model.json")
             ml_models["f1_model"] = booster
             print("Model loaded.")
         except Exception as e:
             print(f"Error loading model: {e}")
         try:
-            with open("abu_dhabi_model.json", "rb") as f:
+            with open("abudhabi_model.json", "rb") as f:
                 booster = xgb.Booster()
                 booster.load_model(f)
                 ml_models["f1_model"] = booster
