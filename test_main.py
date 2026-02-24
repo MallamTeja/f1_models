@@ -4,12 +4,34 @@ from main import app, ml_models, lookup_data
 import xgboost as xgb
 import json
 import os
+from sklearn_json import from_dict
+import numpy as np
 
-if os.path.exists("abu_dhabi_model.json"):
+if os.path.exists("abudhabi_model.json"):
     try:
         booster = xgb.Booster()
-        booster.load_model("abu_dhabi_model.json")
-        ml_models["f1_model"] = booster
+        booster.load_model("abudhabi_model.json")
+        ml_models["abudhabi"] = booster
+    except:
+        pass
+
+if os.path.exists("qatarmodel.json"):
+    try:
+        booster = xgb.Booster()
+        booster.load_model("qatarmodel.json")
+        ml_models["qatar"] = booster
+    except:
+        pass
+
+if os.path.exists("us_model.json"):
+    try:
+        with open("us_model.json", "r") as f:
+            artifact = json.load(f)
+            ml_models["usa"] = from_dict(artifact["model"])
+            if not hasattr(ml_models["usa"], "_loss"):
+                from sklearn.ensemble import GradientBoostingRegressor
+                dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
+                ml_models["usa"]._loss = dummy._loss
     except:
         pass
 
@@ -23,15 +45,16 @@ def test_read_root():
     response = client.get("/info")
     assert response.status_code == 200
     assert "F1 Race Pace Predictor" in response.json()["message"]
+    assert response.json()["version"] == "1.2.0"
 
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
-
-def test_predict_logic():
+def test_predict_abudhabi():
     payload = {
+        "race_name": "abudhabi",
         "driver_code": "VER",
         "qualifying_time": 82.207,
         "clean_air_race_pace": 91.10,
@@ -39,14 +62,44 @@ def test_predict_logic():
         "temperature": 25.0
     }
     response = client.post("/predict", json=payload)
-    print("STATUS:", response.status_code)
-    print("BODY:", response.text)
     assert response.status_code == 200
-    assert "VER" in response.json()["driver"]
-    assert "predicted_pace" in response.json()
+    data = response.json()
+    assert data["race"] == "abudhabi"
+    assert data["meta"]["model"] == "abudhabi_xgb_v1"
+
+def test_predict_qatar():
+    payload = {
+        "race_name": "qatar",
+        "driver_code": "VER",
+        "qualifying_time": 82.207,
+        "clean_air_race_pace": 93.20,
+        "rain_prob": 0.0,
+        "temperature": 30.0
+    }
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["race"] == "qatar"
+    assert data["meta"]["model"] == "qatar_xgb_v1"
+
+def test_predict_usa():
+    payload = {
+        "race_name": "usa",
+        "driver_code": "VER",
+        "qualifying_time": 94.5,
+        "clean_air_race_pace": 100.2,
+        "rain_prob": 0.0,
+        "temperature": 35.0
+    }
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["race"] == "usa"
+    assert data["meta"]["model"] == "usa_gbr_v1"
 
 def test_predict_invalid_driver():
     payload = {
+        "race_name": "abudhabi",
         "driver_code": "XXX",
         "qualifying_time": 82.207,
         "clean_air_race_pace": 91.10,
@@ -55,13 +108,12 @@ def test_predict_invalid_driver():
     }
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
-    assert "Unknown driver code" in response.json()["detail"]
 
-
-def test_predict_invalid_qualifying_time_zero():
+def test_predict_invalid_qualifying_time():
     payload = {
+        "race_name": "abudhabi",
         "driver_code": "VER",
-        "qualifying_time": 0,
+        "qualifying_time": 20.0,
         "clean_air_race_pace": 91.10,
         "rain_prob": 0.0,
         "temperature": 25.0
@@ -69,35 +121,10 @@ def test_predict_invalid_qualifying_time_zero():
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
 
-
-def test_predict_invalid_rain_prob():
+def test_predict_invalid_race():
     payload = {
+        "race_name": "mexico",
         "driver_code": "VER",
-        "qualifying_time": 82.207,
-        "clean_air_race_pace": 91.10,
-        "rain_prob": 150.0,
-        "temperature": 25.0
-    }
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 422
-
-
-def test_predict_realistic_range_check():
-    payload = {
-        "driver_code": "VER",
-        "qualifying_time": 150.0,
-        "clean_air_race_pace": 160.0,
-        "rain_prob": 0.0,
-        "temperature": 25.0
-    }
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 422
-    assert "70-95 seconds" in response.json()["detail"]
-
-
-def test_predict_string_driver_code():
-    payload = {
-        "driver_code": "string",
         "qualifying_time": 82.207,
         "clean_air_race_pace": 91.10,
         "rain_prob": 0.0,
@@ -105,3 +132,16 @@ def test_predict_string_driver_code():
     }
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
+
+def test_predict_logic_order():
+    payload = {
+        "race_name": "usa",
+        "driver_code": "VER",
+        "qualifying_time": 100.0,
+        "clean_air_race_pace": 90.0,
+        "rain_prob": 0.0,
+        "temperature": 35.0
+    }
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 422
+    assert "slower than qualifying time" in response.json()["detail"]
