@@ -21,6 +21,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirement.txt ]; then pip install -r requirement.txt; fi
+        python -c "import os, sklearn_json; p = os.path.dirname(sklearn_json.__file__); [open(f, 'w').write(open(f).read().replace(', _gb_losses', '')) for f in [os.path.join(p, n) for n in ['classification.py', 'regression.py']] if os.path.exists(f)]"
     - name: Run tests
       run: |
         python -m pytest test_main.py
