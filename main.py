@@ -3,142 +3,156 @@ import time
 import json
 import numpy as np
 import xgboost as xgb
+from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from contextlib import asynccontextmanager
+from sklearn_json import from_dict
 
 ml_models = {}
 lookup_data = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if os.path.exists("abu_dhabi_model.json"):
+    if os.path.exists("abudhabi_model.json"):
         try:    
             booster = xgb.Booster()
-            booster.load_model("abu_dhabi_model.json")
-            ml_models["f1_model"] = booster
-            print("Model loaded.")
+            booster.load_model("abudhabi_model.json")
+            ml_models["abudhabi"] = booster
         except Exception as e:
-            print(f"Error loading model: {e}")
+            pass
+            
+    if os.path.exists("qatarmodel.json"):
         try:
-            with open("abu_dhabi_model.json", "rb") as f:
-                booster = xgb.Booster()
-                booster.load_model(f)
-                ml_models["f1_model"] = booster
-                print("Model loaded as binary.")
-        except Exception as e2:
-            print(f"Error loading model as binary: {e2}")
+            booster = xgb.Booster()
+            booster.load_model("qatarmodel.json")
+            ml_models["qatar"] = booster
+        except Exception as e:
+            pass
+    
+    if os.path.exists("us_model.json"):
+        try:
+            with open("us_model.json", "r") as f:
+                artifact = json.load(f)
+                ml_models["usa"] = from_dict(artifact["model"])
+                
+                if not hasattr(ml_models["usa"], "_loss"):
+                    from sklearn.ensemble import GradientBoostingRegressor
+                    dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
+                    ml_models["usa"]._loss = dummy._loss
+        except Exception as e:
+            pass
     
     if os.path.exists("lookup_data.json"):
         with open("lookup_data.json", "r") as f:
             lookup_data["data"] = json.load(f)
-            print("Lookup data loaded.")
     
     yield
-    
     ml_models.clear()
 
 app = FastAPI(
     title="F1 Race Pace Predictor",
     description="API for predicting F1 race pace based on qualifying and weather data",
-    version="1.0.0",
+    version="1.2.0",
     lifespan=lifespan,
     docs_url="/",
     redoc_url=None
 )
 
 class PredictionInput(BaseModel):
-    driver_code: str = Field(
-        min_length=3,
-        max_length=3,
-        description="3-letter F1 driver code (e.g., VER, LEC, ALO)"
-    )
-    qualifying_time: float = Field(
-        gt=0,
-        le=200,
-        description="Qualifying lap time in seconds"
-    )
-    clean_air_race_pace: float = Field(
-        gt=0,
-        le=200,
-        description="Race pace with clean air in seconds"
-    )
-    rain_prob: float = Field(
-        ge=0,
-        le=100,
-        description="Rain probability as percentage (0-100)"
-    )
-    temperature: float = Field(
-        ge=-10,
-        le=70,
-        description="Track temperature in Celsius"
-    )
+    race_name: str = Field(description="Race name: 'abudhabi', 'qatar', or 'usa'")
+    driver_code: str = Field(min_length=3, max_length=3, description="3-letter F1 driver code")
+    qualifying_time: float = Field(gt=0, le=200, description="Qualifying lap time in seconds")
+    clean_air_race_pace: float = Field(gt=0, le=200, description="Race pace with clean air in seconds")
+    rain_prob: float = Field(ge=0, le=100, description="Rain probability as percentage")
+    temperature: float = Field(ge=-10, le=70, description="Track temperature in Celsius")
+
+    @field_validator("race_name")
+    @classmethod
+    def validate_race_name(cls, v: str) -> str:
+        val = v.lower().strip().replace(" ", "_").replace("-", "_")
+        if val in ["abudhabi", "abu_dhabi", "yas_marina"]:
+            return "abudhabi"
+        if val in ["qatar", "lusail"]:
+            return "qatar"
+        if val in ["usa", "united_states", "austin", "cota"]:
+            return "usa"
+        raise ValueError("Race name must be one of: abudhabi, qatar, usa")
 
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
     start_time = time.time()
-    model: Any = ml_models.get("f1_model")
+    race = input_data.race_name
+    model = ml_models.get(race)
     
     if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
+        raise HTTPException(status_code=500, detail=f"Model for '{race}' not loaded")
     
     drivers = lookup_data.get("data", {}).get("drivers", {})
     driver_code_upper = input_data.driver_code.upper()
     
     if driver_code_upper not in drivers:
-        allowed_drivers = ", ".join(sorted(drivers.keys()))
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown driver code '{driver_code_upper}'. Allowed: {allowed_drivers}"
-        )
+        raise HTTPException(status_code=422, detail=f"Unknown driver code '{driver_code_upper}'")
     
     team_score = drivers[driver_code_upper]
     
-    if not (70 <= input_data.qualifying_time <= 95):
-        raise HTTPException(
-            status_code=422,
-            detail="Qualifying time must be 70-95 seconds (realistic for Abu Dhabi)"
-        )
+    ranges = {
+        "abudhabi": (70, 95),
+        "qatar": (75, 110),
+        "usa": (85, 120)
+    }
+    valid_range = ranges.get(race)
     
-    if not (70 <= input_data.clean_air_race_pace <= 95):
-        raise HTTPException(
-            status_code=422,
-            detail="Clean air race pace must be 70-95 seconds"
-        )
+    if not (valid_range[0] <= input_data.qualifying_time <= valid_range[1]):
+        raise HTTPException(status_code=422, detail=f"Qualifying time for {race} invalid")
+    
+    if not (valid_range[0] <= input_data.clean_air_race_pace <= valid_range[1]):
+        raise HTTPException(status_code=422, detail=f"Clean air race pace for {race} invalid")
     
     if input_data.clean_air_race_pace <= input_data.qualifying_time:
-        raise HTTPException(
-            status_code=422,
-            detail="Clean air race pace should be slower than qualifying time"
-        )
+        raise HTTPException(status_code=422, detail="Clean air race pace should be slower than qualifying time")
     
-    features = np.array([[input_data.qualifying_time,input_data.rain_prob,input_data.temperature,team_score,input_data.clean_air_race_pace]])
+    features = np.array([[
+        input_data.qualifying_time, 
+        input_data.rain_prob, 
+        input_data.temperature, 
+        team_score, 
+        input_data.clean_air_race_pace
+    ]])
     
     try:
-        dmatrix = xgb.DMatrix(features)
-        prediction = model.predict(dmatrix)[0]
+        if race in ["abudhabi", "qatar"]:
+            dmatrix = xgb.DMatrix(features)
+            prediction = model.predict(dmatrix)[0]
+            model_info = f"{race}_xgb_v1"
+        else: 
+            prediction = model.predict(features)[0]
+            model_info = "usa_gbr_v1"
+
         latency = time.time() - start_time
         return {
-            "driver": input_data.driver_code.upper(),
+            "race": race,
+            "driver": driver_code_upper,
             "predicted_pace": float(prediction),
             "meta": {
                 "latency": f"{latency:.4f}s",
-                "model": "abu_dhabi_xgb_v1"
+                "model": model_info
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 @app.get("/info", include_in_schema=False)
 async def info():
     return {
-        "message": "F1 Race Pace Predictor API",
-        "version": "1.0.0"
+        "message": "F1 Race Pace Predictor API ",
+        "version": "1.2.0",
+        "available_races": ["Abu Dhabi", "Qatar", "United States"]
     }
 
 @app.get("/health", include_in_schema=False)
 async def health_check():
     return {
         "status": "healthy",
-        "model_loaded": "f1_model" in ml_models
+        "models_loaded": list(ml_models.keys())
     }
