@@ -158,7 +158,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 model = GradientBoostingRegressor(
-    n_estimators=500,
+    n_estimators=400,
     learning_rate=0.05,
     max_depth=3,
     subsample=0.9,
@@ -207,7 +207,7 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return super().default(obj)
 
-with open("us_model.json", "w") as f:
+with open("usmodel.json", "w") as f:
     json.dump(artifact, f, cls=NumpyEncoder)
 
-print("us_model.json saved successfully")
+print("usmodel.json saved successfully")
