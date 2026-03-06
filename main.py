@@ -8,6 +8,41 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from contextlib import asynccontextmanager
 from sklearn_json import from_dict
+from sklearn_json import regression as reg
+from sklearn.tree._tree import Tree
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn import dummy
+
+def patched_deserialize_tree(tree_dict, n_features, n_classes, n_outputs):
+    tree_dict['nodes'] = [tuple(lst) for lst in tree_dict['nodes']]
+    names = ['left_child', 'right_child', 'feature', 'threshold', 'impurity', 'n_node_samples', 'weighted_n_node_samples']
+    if len(tree_dict['nodes'][0]) > 7:
+        names.append('missing_go_to_left')
+    tree_dict['nodes'] = np.array(tree_dict['nodes'], dtype=np.dtype({'names': names, 'formats': tree_dict['nodes_dtype']}))
+    tree_dict['values'] = np.array(tree_dict['values'])
+    tree = Tree(n_features, np.array([n_classes], dtype=np.intp), n_outputs)
+    tree.__setstate__(tree_dict)
+    return tree
+
+def patched_deserialize_gradient_boosting_regressor(model_dict):
+    model = GradientBoostingRegressor(**model_dict['params'])
+    trees = [reg.deserialize_decision_tree_regressor(tree) for tree in model_dict['estimators_']]
+    model.estimators_ = np.array(trees).reshape(model_dict['estimators_shape'])
+    if 'init_' in model_dict and model_dict['init_']['meta'] == 'dummy':
+        model.init_ = dummy.DummyRegressor()
+        model.init_.__dict__ = model_dict['init_']
+        model.init_.__dict__.pop('meta', None)
+
+    model.train_score_ = np.array(model_dict['train_score_'])
+    model.max_features_ = model_dict['max_features_']
+    model.n_features_ = model_dict['n_features_']
+    model.loss_ = None
+    if 'priors' in model_dict:
+        model.init_.priors = np.array(model_dict['priors'])
+    return model
+
+reg.deserialize_tree = patched_deserialize_tree
+reg.deserialize_gradient_boosting_regressor = patched_deserialize_gradient_boosting_regressor
 
 ml_models = {}
 lookup_data = {}
@@ -42,6 +77,19 @@ async def lifespan(app: FastAPI):
                     ml_models["usa"]._loss = dummy._loss
         except Exception as e:
             pass
+
+    if os.path.exists("mexico_model.json"):
+        try:
+            with open("mexico_model.json", "r") as f:
+                artifact = json.load(f)
+                ml_models["mexico"] = from_dict(artifact["model"])
+                
+                if not hasattr(ml_models["mexico"], "_loss"):
+                    from sklearn.ensemble import GradientBoostingRegressor
+                    dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
+                    ml_models["mexico"]._loss = dummy._loss
+        except Exception as e:
+            pass
     
     if os.path.exists("lookup_data.json"):
         with open("lookup_data.json", "r") as f:
@@ -60,7 +108,7 @@ app = FastAPI(
 )
 
 class PredictionInput(BaseModel):
-    race_name: str = Field(description="Race name: 'abudhabi', 'qatar', or 'usa'")
+    race_name: str = Field(description="Race name: 'abudhabi', 'qatar', 'usa', or 'mexico'")
     driver_code: str = Field(min_length=3, max_length=3, description="3-letter F1 driver code")
     qualifying_time: float = Field(gt=0, le=200, description="Qualifying lap time in seconds")
     clean_air_race_pace: float = Field(gt=0, le=200, description="Race pace with clean air in seconds")
@@ -77,7 +125,9 @@ class PredictionInput(BaseModel):
             return "qatar"
         if val in ["usa", "united_states", "austin", "cota"]:
             return "usa"
-        raise ValueError("Race name must be one of: abudhabi, qatar, usa")
+        if val in ["mexico", "mexico_city"]:
+            return "mexico"
+        raise ValueError("Race name must be one of: abudhabi, qatar, usa, mexico")
 
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
@@ -99,7 +149,8 @@ async def predict(input_data: PredictionInput):
     ranges = {
         "abudhabi": (70, 95),
         "qatar": (75, 110),
-        "usa": (85, 120)
+        "usa": (85, 120),
+        "mexico": (70, 100)
     }
     valid_range = ranges.get(race)
     
@@ -127,7 +178,7 @@ async def predict(input_data: PredictionInput):
             model_info = f"{race}_xgb_v1"
         else: 
             prediction = model.predict(features)[0]
-            model_info = "usa_gbr_v1"
+            model_info = f"{race}_gbr_v1"
 
         latency = time.time() - start_time
         return {
@@ -147,7 +198,7 @@ async def info():
     return {
         "message": "F1 Race Pace Predictor API ",
         "version": "1.2.0",
-        "available_races": ["Abu Dhabi", "Qatar", "United States"]
+        "available_races": ["Abu Dhabi", "Qatar", "United States", "Mexico"]
     }
 
 @app.get("/health", include_in_schema=False)

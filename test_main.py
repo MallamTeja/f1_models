@@ -35,6 +35,18 @@ if os.path.exists("us_model.json"):
     except:
         pass
 
+if os.path.exists("mexico_model.json"):
+    try:
+        with open("mexico_model.json", "r") as f:
+            artifact = json.load(f)
+            ml_models["mexico"] = from_dict(artifact["model"])
+            if not hasattr(ml_models["mexico"], "_loss"):
+                from sklearn.ensemble import GradientBoostingRegressor
+                dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
+                ml_models["mexico"]._loss = dummy._loss
+    except:
+        pass
+
 if os.path.exists("lookup_data.json"):
     with open("lookup_data.json", "r") as f:
         lookup_data["data"] = json.load(f)
@@ -123,7 +135,7 @@ def test_predict_invalid_qualifying_time():
 
 def test_predict_invalid_race():
     payload = {
-        "race_name": "mexico",
+        "race_name": "moon",
         "driver_code": "VER",
         "qualifying_time": 82.207,
         "clean_air_race_pace": 91.10,
@@ -132,6 +144,21 @@ def test_predict_invalid_race():
     }
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
+
+def test_predict_mexico():
+    payload = {
+        "race_name": "mexico",
+        "driver_code": "VER",
+        "qualifying_time": 82.207,
+        "clean_air_race_pace": 91.10,
+        "rain_prob": 0.0,
+        "temperature": 25.0
+    }
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["race"] == "mexico"
+    assert data["meta"]["model"] == "mexico_gbr_v1"
 
 def test_predict_logic_order():
     payload = {
