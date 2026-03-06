@@ -4,7 +4,7 @@ from main import app, ml_models, lookup_data
 import xgboost as xgb
 import json
 import os
-from sklearn_json import from_dict
+from sklearn_json import deserialize_model
 import numpy as np
 
 if os.path.exists("abudhabi_model.json"):
@@ -27,7 +27,7 @@ if os.path.exists("us_model.json"):
     try:
         with open("us_model.json", "r") as f:
             artifact = json.load(f)
-            ml_models["usa"] = from_dict(artifact["model"])
+            ml_models["usa"] = deserialize_model(artifact["model"])
             if not hasattr(ml_models["usa"], "_loss"):
                 from sklearn.ensemble import GradientBoostingRegressor
                 dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
@@ -39,7 +39,7 @@ if os.path.exists("mexico_model.json"):
     try:
         with open("mexico_model.json", "r") as f:
             artifact = json.load(f)
-            ml_models["mexico"] = from_dict(artifact["model"])
+            ml_models["mexico"] = deserialize_model(artifact["model"])
             if not hasattr(ml_models["mexico"], "_loss"):
                 from sklearn.ensemble import GradientBoostingRegressor
                 dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))

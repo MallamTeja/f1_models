@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from contextlib import asynccontextmanager
-from sklearn_json import from_dict
+from sklearn_json import deserialize_model
 from sklearn_json import regression as reg
 from sklearn.tree._tree import Tree
 from sklearn.ensemble import GradientBoostingRegressor
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
         try:
             with open("us_model.json", "r") as f:
                 artifact = json.load(f)
-                ml_models["usa"] = from_dict(artifact["model"])
+                ml_models["usa"] = deserialize_model(artifact["model"])
                 
                 if not hasattr(ml_models["usa"], "_loss"):
                     from sklearn.ensemble import GradientBoostingRegressor
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
         try:
             with open("mexico_model.json", "r") as f:
                 artifact = json.load(f)
-                ml_models["mexico"] = from_dict(artifact["model"])
+                ml_models["mexico"] = deserialize_model(artifact["model"])
                 
                 if not hasattr(ml_models["mexico"], "_loss"):
                     from sklearn.ensemble import GradientBoostingRegressor
