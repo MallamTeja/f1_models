@@ -5,6 +5,7 @@ URL = "http://localhost:8000/predict"
 
 def predict_position(driver_code, qualifying_time, clean_air_race_pace, rain_prob=0.2, temperature=30):
     payload = {
+        "race_name": "abudhabi",
         "driver_code": driver_code,
         "qualifying_time": qualifying_time,
         "clean_air_race_pace": clean_air_race_pace,

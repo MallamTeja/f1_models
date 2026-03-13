@@ -11,11 +11,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
+import joblib
+
 
 load_dotenv()
-fastf1.Cache.enable_cache("f1_cache")
-
-
+cache_dir = os.path.join(os.path.dirname(__file__), '..', 'f1_cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir)
 
 OPENWEATHER_API = os.getenv("openweatherapi")
 LAT, LON = 24.4672, 54.6031
@@ -62,11 +65,14 @@ qualifying_2025 = pd.DataFrame({
 
 qualifying_2025["CleanAirRacePace (s)"] = qualifying_2025["Driver"].map(clean_air_race_pace)
 
-weather = requests.get(
-    f"http://api.openweathermap.org/data/2.5/forecast"
-    f"?lat={LAT}&lon={LON}&appid={OPENWEATHER_API}&units=metric",
-    timeout=10
-).json()
+try:
+    weather = requests.get(
+        f"http://api.openweathermap.org/data/2.5/forecast"
+        f"?lat={LAT}&lon={LON}&appid={OPENWEATHER_API}&units=metric",
+        timeout=10
+    ).json()
+except Exception:
+    weather = {}
 
 forecast = next(
     (f for f in weather.get("list", []) if f.get("dt_txt") == FORECAST_TIME),
@@ -152,24 +158,29 @@ print(top5)
 
 print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
 
-explainer = shap.Explainer(model)
-shap_values = explainer(X_train)
+# Standardized SHAP Explainer for XGBoost
+try:
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_train)
+    
+    shap.summary_plot(
+        shap_values,
+        X_train,
+        feature_names=[
+            "QualifyingTime",
+            "RainProbability",
+            "Temperature",
+            "TeamPerformanceScore",
+            "CleanAirRacePace (s)"
+        ],
+        show=False
+    )
+    plt.tight_layout()
+    os.makedirs("models", exist_ok=True)
+    plt.savefig("models/shap_abudhabi.png")
+except Exception as e:
+    print(f"SHAP error: {e}")
 
-shap.summary_plot(
-    shap_values,
-    X_train,
-    feature_names=[
-        "QualifyingTime",
-        "RainProbability",
-        "Temperature",
-        "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
-    ],
-    show=False
-)
-
-plt.tight_layout()
-plt.show()
-
-model.get_booster().save_model("abu_dhabi_model.json")
-print("abu_dhabi_model.json saved successfully")
+# Save to standardized models directory
+joblib.dump(model, "models/abu_dhabi_model.joblib")
+print("models/abu_dhabi_model.joblib saved successfully")

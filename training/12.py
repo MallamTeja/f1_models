@@ -14,7 +14,10 @@ from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
 
 load_dotenv()
-fastf1.Cache.enable_cache("f1_cache")
+cache_dir = os.path.join(os.path.dirname(__file__), '..', 'f1_cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir)
 
 
 
@@ -219,4 +222,4 @@ plt.show()
 
 
 
-joblib.dump(model, "abu_dhabi_ensemble_model.joblib")
+joblib.dump(model, "../abu_dhabi_ensemble_model.joblib")

@@ -10,11 +10,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn_json import to_dict
-import json
+import joblib
 
 load_dotenv()
-fastf1.Cache.enable_cache("f1_cache")
+cache_dir = os.path.join(os.path.dirname(__file__), '..', 'f1_cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir)
 
 OPENWEATHER_API = os.getenv("OPENWEATHER_API")
 LAT, LON = 30.1328, -97.6411
@@ -179,35 +181,29 @@ print("\nPredicted US GP Race Pace – Top 5")
 print(top5)
 print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
 
-explainer = shap.Explainer(model)
-shap_values = explainer(X_train)
-shap.summary_plot(
-    shap_values,
-    X_train,
-    feature_names=feature_cols,
-    show=False
-)
-
-plt.tight_layout()
-plt.savefig("shap_usgp.png")
-plt.show()
+# Standardized SHAP Explainer
+try:
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X_train)
+    
+    shap.summary_plot(
+        shap_values,
+        X_train,
+        feature_names=feature_cols,
+        show=False
+    )
+    plt.tight_layout()
+    os.makedirs("models", exist_ok=True)
+    plt.savefig("models/shap_usa.png")
+except Exception as e:
+    print(f"SHAP error: {e}")
 
 artifact = {
-    "model": to_dict(model),
-    "imputer": {
-        "strategy": imputer.strategy,
-        "statistics": imputer.statistics_.tolist()
-    },
+    "model": model,
+    "imputer": imputer,
     "features": feature_cols
 }
 
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super().default(obj)
-
-with open("usmodel.json", "w") as f:
-    json.dump(artifact, f, cls=NumpyEncoder)
-
-print("usmodel.json saved successfully")
+# Save to standardized models directory
+joblib.dump(artifact, "models/us_model.joblib")
+print("models/us_model.joblib saved successfully")

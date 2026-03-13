@@ -11,9 +11,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.impute import SimpleImputer
 from xgboost import XGBRegressor
+import joblib
 
 load_dotenv()
-fastf1.Cache.enable_cache("f1_cache")
+cache_dir = os.path.join(os.path.dirname(__file__), '..', 'f1_cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir)
 
 OPENWEATHER_API = os.getenv("openweatherapi")
 
@@ -45,16 +49,16 @@ sector_times_2024["TotalSectorTime (s)"] = (
 clean_air_race_pace = {
     "VER": 93.19,
     "HAM": 94.02,
-    "LEC": 93.42,
-    "NOR": 93.43,
-    "ALO": 94.78,
-    "PIA": 93.23,
+    "ALO": 94.79,
+    "PIA": 94.23,
     "RUS": 93.83,
-    "SAI": 94.50,
+    "SAI": 94.59,
     "STR": 95.32,
     "HUL": 95.35,
+    "NOR": 93.46,
     "OCO": 95.68,
     "ALB": 95.00,
+    "LEC": 93.49,
     "GAS": 95.80,
 }
 
@@ -189,24 +193,22 @@ print(top5)
 
 print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
 
-explainer = shap.Explainer(model)
-shap_values = explainer(X_train)
+# Standardized SHAP Explainer for XGBoost
+try:
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_train)
+    
+    shap.summary_plot(
+        shap_values,
+        X_train,
+        show=False
+    )
+    plt.tight_layout()
+    os.makedirs("models", exist_ok=True)
+    plt.savefig("models/shap_qatar.png")
+except Exception as e:
+    print(f"SHAP error: {e}")
 
-shap.summary_plot(
-    shap_values,
-    X_train,
-    feature_names=[
-        "QualifyingTime",
-        "RainProbability",
-        "Temperature",
-        "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
-    ],
-    show=False
-)
-
-plt.tight_layout()
-plt.show()
-
-model.get_booster().save_model("qatarmodel.json")
-print("qatarmodel.json saved successfully")
+# Save to standardized models directory
+joblib.dump(model, "models/qatar_model.joblib")
+print("models/qatar_model.joblib saved successfully")

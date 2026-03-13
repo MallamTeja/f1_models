@@ -14,7 +14,10 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
 
 load_dotenv()
-fastf1.Cache.enable_cache("f1_cache")
+cache_dir = os.path.join(os.path.dirname(__file__), '..', 'f1_cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir)
 
 OPENWEATHER_API = os.getenv("openweatherapi")
 if not OPENWEATHER_API:
@@ -209,4 +212,4 @@ print(f"Model Error (MAE): {mean_absolute_error(y_test, y_pred):.2f} seconds")
 
 
 
-model.save("abu_dhabi_ffnmodel.keras")
+model.save("../abu_dhabi_ffnmodel.keras")

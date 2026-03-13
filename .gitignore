@@ -7,3 +7,5 @@ build/
 venv/
 f1_cache/
 .pytest_cache/
+fastf1_cache/
+tests/experi.py

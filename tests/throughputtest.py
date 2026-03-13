@@ -33,6 +33,7 @@ requests_payloads = []
 for _ in range(REPEAT_PER_DRIVER):
     for d in drivers_data:
         requests_payloads.append({
+            "race_name": "abudhabi",
             "driver_code": d["driver"],
             "qualifying_time": d["qual"],
             "clean_air_race_pace": d["pace"],

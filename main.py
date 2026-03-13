@@ -3,96 +3,47 @@ import time
 import json
 import numpy as np
 import xgboost as xgb
+import joblib
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from contextlib import asynccontextmanager
-from sklearn_json import deserialize_model
-from sklearn_json import regression as reg
-from sklearn.tree._tree import Tree
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn import dummy
-
-def patched_deserialize_tree(tree_dict, n_features, n_classes, n_outputs):
-    tree_dict['nodes'] = [tuple(lst) for lst in tree_dict['nodes']]
-    names = ['left_child', 'right_child', 'feature', 'threshold', 'impurity', 'n_node_samples', 'weighted_n_node_samples']
-    if len(tree_dict['nodes'][0]) > 7:
-        names.append('missing_go_to_left')
-    tree_dict['nodes'] = np.array(tree_dict['nodes'], dtype=np.dtype({'names': names, 'formats': tree_dict['nodes_dtype']}))
-    tree_dict['values'] = np.array(tree_dict['values'])
-    tree = Tree(n_features, np.array([n_classes], dtype=np.intp), n_outputs)
-    tree.__setstate__(tree_dict)
-    return tree
-
-def patched_deserialize_gradient_boosting_regressor(model_dict):
-    model = GradientBoostingRegressor(**model_dict['params'])
-    trees = [reg.deserialize_decision_tree_regressor(tree) for tree in model_dict['estimators_']]
-    model.estimators_ = np.array(trees).reshape(model_dict['estimators_shape'])
-    if 'init_' in model_dict and model_dict['init_']['meta'] == 'dummy':
-        model.init_ = dummy.DummyRegressor()
-        model.init_.__dict__ = model_dict['init_']
-        model.init_.__dict__.pop('meta', None)
-
-    model.train_score_ = np.array(model_dict['train_score_'])
-    model.max_features_ = model_dict['max_features_']
-    model.n_features_ = model_dict['n_features_']
-    model.loss_ = None
-    if 'priors' in model_dict:
-        model.init_.priors = np.array(model_dict['priors'])
-    return model
-
-reg.deserialize_tree = patched_deserialize_tree
-reg.deserialize_gradient_boosting_regressor = patched_deserialize_gradient_boosting_regressor
 
 ml_models = {}
 lookup_data = {}
 
+def load_model_artifact(file_path: str) -> Optional[Any]:
+    """Helper to load model or artifact dictionary."""
+    if not os.path.exists(file_path):
+        return None
+    try:
+        artifact = joblib.load(file_path)
+        if isinstance(artifact, dict) and "model" in artifact:
+            return artifact
+        return {"model": artifact, "imputer": None}
+    except Exception as e:
+        print(f"Error loading {file_path}: {e}")
+        return None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if os.path.exists("abudhabi_model.json"):
-        try:    
-            booster = xgb.Booster()
-            booster.load_model("abudhabi_model.json")
-            ml_models["abudhabi"] = booster
-        except Exception as e:
-            pass
+    # Standardized loading from models/ directory
+    model_configs = {
+        "abudhabi": "models/abu_dhabi_model.joblib",
+        "qatar": "models/qatar_model.joblib",
+        "usa": "models/us_model.joblib",
+        "mexico": "models/mexico_model.joblib"
+    }
+    
+    for race, path in model_configs.items():
+        artifact = load_model_artifact(path)
+        if artifact:
+            ml_models[race] = artifact
             
-    if os.path.exists("qatarmodel.json"):
-        try:
-            booster = xgb.Booster()
-            booster.load_model("qatarmodel.json")
-            ml_models["qatar"] = booster
-        except Exception as e:
-            pass
-    
-    if os.path.exists("us_model.json"):
-        try:
-            with open("us_model.json", "r") as f:
-                artifact = json.load(f)
-                ml_models["usa"] = deserialize_model(artifact["model"])
-                
-                if not hasattr(ml_models["usa"], "_loss"):
-                    from sklearn.ensemble import GradientBoostingRegressor
-                    dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
-                    ml_models["usa"]._loss = dummy._loss
-        except Exception as e:
-            pass
-
-    if os.path.exists("mexico_model.json"):
-        try:
-            with open("mexico_model.json", "r") as f:
-                artifact = json.load(f)
-                ml_models["mexico"] = deserialize_model(artifact["model"])
-                
-                if not hasattr(ml_models["mexico"], "_loss"):
-                    from sklearn.ensemble import GradientBoostingRegressor
-                    dummy = GradientBoostingRegressor().fit(np.zeros((1, 5)), np.zeros(1))
-                    ml_models["mexico"]._loss = dummy._loss
-        except Exception as e:
-            pass
-    
-    if os.path.exists("lookup_data.json"):
-        with open("lookup_data.json", "r") as f:
+    # Load lookup data
+    lookup_path = "models/lookup_data.json"
+    if os.path.exists(lookup_path):
+        with open(lookup_path, "r") as f:
             lookup_data["data"] = json.load(f)
     
     yield
@@ -101,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="F1 Race Pace Predictor",
     description="API for predicting F1 race pace based on qualifying and weather data",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
     docs_url="/",
     redoc_url=None
@@ -133,10 +84,13 @@ class PredictionInput(BaseModel):
 async def predict(input_data: PredictionInput):
     start_time = time.time()
     race = input_data.race_name
-    model = ml_models.get(race)
+    artifact = ml_models.get(race)
     
-    if model is None:
+    if artifact is None:
         raise HTTPException(status_code=500, detail=f"Model for '{race}' not loaded")
+    
+    model = artifact["model"]
+    imputer = artifact.get("imputer")
     
     drivers = lookup_data.get("data", {}).get("drivers", {})
     driver_code_upper = input_data.driver_code.upper()
@@ -147,10 +101,10 @@ async def predict(input_data: PredictionInput):
     team_score = drivers[driver_code_upper]
     
     ranges = {
-        "abudhabi": (70, 95),
-        "qatar": (75, 110),
-        "usa": (85, 120),
-        "mexico": (70, 100)
+        "abudhabi": (70, 105),
+        "qatar": (75, 120),
+        "usa": (85, 130),
+        "mexico": (70, 110)
     }
     valid_range = ranges.get(race)
     
@@ -163,22 +117,42 @@ async def predict(input_data: PredictionInput):
     if input_data.clean_air_race_pace <= input_data.qualifying_time:
         raise HTTPException(status_code=422, detail="Clean air race pace should be slower than qualifying time")
     
-    features = np.array([[
-        input_data.qualifying_time, 
-        input_data.rain_prob, 
-        input_data.temperature, 
-        team_score, 
-        input_data.clean_air_race_pace
-    ]])
+    # Feature engineering based on model requirements
+    # Note: USA and Mexico models use: QualifyingTime, CleanAirRacePace, TeamPerformanceScore, TotalSectorTime (imputed), RainProbability
+    # Abu Dhabi and Qatar use: QualifyingTime, RainProbability, Temperature, TeamPerformanceScore, CleanAirRacePace
+    
+    if race in ["usa", "mexico"]:
+        features = np.array([[
+            input_data.qualifying_time,
+            input_data.clean_air_race_pace,
+            team_score,
+            np.nan, # TotalSectorTime to be imputed
+            input_data.rain_prob
+        ]])
+    else:
+        features = np.array([[
+            input_data.qualifying_time, 
+            input_data.rain_prob, 
+            input_data.temperature, 
+            team_score, 
+            input_data.clean_air_race_pace
+        ]])
     
     try:
-        if race in ["abudhabi", "qatar"]:
-            dmatrix = xgb.DMatrix(features)
-            prediction = model.predict(dmatrix)[0]
-            model_info = f"{race}_xgb_v1"
+        if imputer:
+            features = imputer.transform(features)
+            
+        if race in ["abudhabi", "qatar"] and hasattr(model, "predict") and "xgboost" in str(type(model)).lower():
+            # Handle native XGBoost Booster if needed, though XGBRegressor is usually used
+            if not hasattr(model, "predict"):
+                 dmatrix = xgb.DMatrix(features)
+                 prediction = model.predict(dmatrix)[0]
+            else:
+                 prediction = model.predict(features)[0]
+            model_info = f"{race}_xgb_v2"
         else: 
             prediction = model.predict(features)[0]
-            model_info = f"{race}_gbr_v1"
+            model_info = f"{race}_v2"
 
         latency = time.time() - start_time
         return {
@@ -197,7 +171,7 @@ async def predict(input_data: PredictionInput):
 async def info():
     return {
         "message": "F1 Race Pace Predictor API ",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "available_races": ["Abu Dhabi", "Qatar", "United States", "Mexico"]
     }
 
