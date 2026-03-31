@@ -2,14 +2,6 @@ fastapi
 uvicorn[standard]
 pydantic
 numpy<2.0.0
-pandas
 xgboost
 scikit-learn==1.2.2
 joblib==1.3.2
-fastf1
-requests
-shap
-matplotlib
-python-dotenv
-httpx
-pytest
