@@ -86,7 +86,12 @@ class PredictionInput(BaseModel):
             return "usa"
         if val in ["mexico", "mexico_city"]:
             return "mexico"
-        raise ValueError("Race name must be one of: abudhabi, qatar, usa, mexico")
+        # Enhanced formal error message
+        raise ValueError(
+            f"The provided race name '{v}' is not valid. "
+            "Please specify one of the supported race identifiers: "
+            "'abudhabi', 'qatar', 'usa', or 'mexico'."
+        )
 
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
