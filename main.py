@@ -25,23 +25,31 @@ def load_model_artifact(file_path: str) -> Optional[Any]:
         print(f"Error loading {file_path}: {e}")
         return None
 
+def get_race_key_from_filename(filename: str) -> str:
+    """Extract race key from filename (e.g., 'abu_dhabi_model.joblib' -> 'abudhabi')."""
+    name = filename.lower().replace("_model.joblib", "").replace("_", "").replace("-", "")
+    if name == "us":
+        return "usa"
+    return name
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Standardized loading from models/ directory
-    model_configs = {
-        "abudhabi": "models/abu_dhabi_model.joblib",
-        "qatar": "models/qatar_model.joblib",
-        "usa": "models/us_model.joblib",
-        "mexico": "models/mexico_model.joblib"
-    }
+    # Dynamically load all .joblib models from models/ directory
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(base_path, "models")
     
-    for race, path in model_configs.items():
-        artifact = load_model_artifact(path)
-        if artifact:
-            ml_models[race] = artifact
+    if os.path.exists(models_dir):
+        for filename in os.listdir(models_dir):
+            if filename.endswith(".joblib"):
+                race_key = get_race_key_from_filename(filename)
+                path = os.path.join(models_dir, filename)
+                artifact = load_model_artifact(path)
+                if artifact:
+                    ml_models[race_key] = artifact
+                    print(f"Loaded model for {race_key} from {filename}")
             
     # Load lookup data
-    lookup_path = "models/lookup_data.json"
+    lookup_path = os.path.join(models_dir, "lookup_data.json")
     if os.path.exists(lookup_path):
         with open(lookup_path, "r") as f:
             lookup_data["data"] = json.load(f)
