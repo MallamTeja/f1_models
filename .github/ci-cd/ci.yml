@@ -20,7 +20,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f requirement.txt ]; then pip install -r requirement.txt; fi
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         # Definitive non-import patch for sklearn-json
         python -c "import os, sys; from glob import glob; import site; skj_paths = [os.path.join(p, 'sklearn_json') for p in site.getsitepackages() + [site.getusersitepackages()] if os.path.isdir(os.path.join(p, 'sklearn_json'))]; [ [open(py, 'w').write(open(py).read().replace(', _gb_losses', '')) for py in glob(os.path.join(p, '**', '*.py'), recursive=True)] for p in skj_paths]"
     - name: Run tests
