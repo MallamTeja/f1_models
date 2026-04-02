@@ -210,5 +210,6 @@ except Exception as e:
     print(f"SHAP error: {e}")
 
 # Save to standardized models directory
+os.makedirs("models", exist_ok=True)
 joblib.dump(model, "models/qatar_model.joblib")
 print("models/qatar_model.joblib saved successfully")

@@ -192,30 +192,23 @@ print(top5)
 
 print(f"\nMAE: {mean_absolute_error(y_test, model.predict(X_test)):.2f} s")
 
-explainer = shap.Explainer(model)
-shap_values = explainer(X_train)
-shap.summary_plot(shap_values, X_train, show=False)
-plt.tight_layout()
-plt.show()
+feature_names = [
+    "QualifyingTime",
+    "RainProbability",
+    "Temperature",
+    "TeamPerformanceScore",
+    "CleanAirRacePace (s)"
+]
 
-
-
-explainer = shap.Explainer(model, X_train)
+explainer = shap.Explainer(model.predict, X_train)
 shap_values = explainer(X_train)
 
 shap.summary_plot(
     shap_values,
     X_train,
-    feature_names=[
-        "QualifyingTime",
-        "RainProbability",
-        "Temperature",
-        "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
-    ],
+    feature_names=feature_names,
     show=False
 )
-
 plt.tight_layout()
 plt.show()
 
