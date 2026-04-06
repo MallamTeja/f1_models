@@ -11,7 +11,7 @@ The **F1 Race Pace Predictor** is a production-grade Machine Learning ecosystem 
 
 ## 🌍 Live Deployment
 The project is fully deployed and accessible via a custom domain with modern networking support:
-* **Primary URL:** [https://f1predictor.tech](f1predictor.tech)
+* **Live Link/Domain:** [https://f1predictor.tech](https://f1predictor.tech)
 * **Subdomain Support:** Fully configured for both the root domain (`@`) and `www` subdomain.
 * **Networking:** Dual-stack support for both **IPv4** and **IPv6** traffic.
 * **Infrastructure:** Hosted on **Render** with automated CI/CD pipelines and SSL encryption.
