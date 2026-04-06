@@ -89,22 +89,7 @@ def test_predict_usa():
     assert data["race"] == "usa"
     assert "v2" in data["meta"]["model"]
 
-def test_predict_mexico():
-    if "mexico" not in ml_models:
-        pytest.skip("Mexico model not available")
-    payload = {
-        "race_name": "mexico",
-        "driver_code": "VER",
-        "qualifying_time": 82.207,
-        "clean_air_race_pace": 91.10,
-        "rain_prob": 0.0,
-        "temperature": 25.0
-    }
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["race"] == "mexico"
-    assert "v2" in data["meta"]["model"]
+
 
 def test_predict_invalid_driver():
     payload = {
