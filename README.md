@@ -61,20 +61,14 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
-
-# Launch API
-uvicorn main:app --reload
+pip install -r req.txt
+d
 ```
-3. Running with Docker
+3. Running with SERVER
 
 ```
-
-# Build the image
-docker build -t f1-predictor.
-
 # Run the container
-docker run -p 8000:8000 --env-file .env f1-predictor
+py -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 ```
 🧪 Testing
