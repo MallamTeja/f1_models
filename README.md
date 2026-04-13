@@ -9,7 +9,7 @@ The **F1 Race Pace Predictor** is a production-grade Machine Learning ecosystem 
 
 ---
 
-## 🌍 Live Deployment
+##  Live Deployment
 The project is fully deployed and accessible via a custom domain with modern networking support:
 * **Live Link/Domain:** [https://f1predictor.tech](https://f1predictor.tech)
 * **Subdomain Support:** Fully configured for both the root domain (`@`) and `www` subdomain.
@@ -18,7 +18,7 @@ The project is fully deployed and accessible via a custom domain with modern net
 
 ---
 
-## 🧠 Data Science & Feature Engineering
+##  Data Science & Feature Engineering
 The core of this project lies in transforming raw telemetry and historical logs into high-impact features for predictive modeling.
 
 ### **The Data Pipeline**
@@ -39,14 +39,14 @@ The project utilizes a diversified ensemble approach to minimize error:
 
 ---
 
-## 🚀 Key Features
+## Key Features
 * **Dynamic Inference Engine:** A **FastAPI** backend that automatically loads specialized `.joblib` model artifacts on startup.
 * **Explainable AI (XAI):** Integrated **SHAP** visualizations to provide transparency into how each feature affects the final prediction.
 * **Performance Benchmark:** Optimized for high-availability, delivering sub-200ms inference response times even under concurrent load.
 
 ---
 
-## 🔧 Setup & Installation
+## Setup & Installation
 
 ### **1. Clone the Repository**
 ```bash
@@ -71,7 +71,7 @@ d
 py -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 ```
-🧪 Testing
+ Testing
 Run the automated test suite to verify model integrity and API logic:
 ```
 pytest test_main.py
