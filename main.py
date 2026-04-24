@@ -5,7 +5,8 @@ import numpy as np
 import xgboost as xgb
 import joblib
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from contextlib import asynccontextmanager
 
@@ -65,6 +66,17 @@ app = FastAPI(
     docs_url="/",
     redoc_url=None
 )
+
+@app.exception_handler(405)
+async def method_not_allowed_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=405,
+        content={
+            "status": "error",
+            "message": "Custom Error: This endpoint requires a POST request. Please send a JSON body using the POST method.",
+            "path": request.url.path
+        }
+    )
 
 class PredictionInput(BaseModel):
     race_name: str = Field(description="Race name: 'abudhabi', 'qatar', 'usa', or 'mexico'")
