@@ -2,7 +2,7 @@
 -r requirements.txt
 # The committed models/*.joblib pickles depend on numpy==2.2.6, scikit-learn==1.5.2, scipy==1.15.3, xgboost==3.2.0, joblib==1.6.0 from requirements.txt; never re-pin them here.
 # fastf1: downloads race laps/sectors; 3.5.3 runs on numpy 2.2 + scipy 1.15 without pulling them off the prod pins.
-fastf1==3.5.3
+fastf1==3.8.3
 # pandas: feature tables in every script; 2.2.3 is the first line built for numpy 2.x and Python 3.12/3.13.
 pandas==2.2.3
 # shap: feature-importance plots; 0.47.2 accepts numpy 2.2 (via numba 0.61) and sklearn 1.5.
