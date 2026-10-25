@@ -10,7 +10,7 @@ shap==0.47.2
 # matplotlib: renders the SHAP and prediction plots; 3.10.1 has numpy 2 wheels for Python 3.11/3.12.
 matplotlib==3.10.1
 # requests: OpenWeather forecast calls; pinned so a retrain resolves the same HTTP stack.
-requests==2.32.3
+requests==2.33.0
 # python-dotenv: load_dotenv() reads openweatherapi from .env.
 python-dotenv==1.1.0
 # tensorflow is deliberately absent: only the dead experiment training/17.py (Keras) needs it; install it by hand to rerun that.
