@@ -6,7 +6,7 @@ fastf1==3.5.3
 # pandas: feature tables in every script; 2.2.3 is the first line built for numpy 2.x and Python 3.12/3.13.
 pandas==2.2.3
 # shap: feature-importance plots; 0.47.2 accepts numpy 2.2 (via numba 0.61) and sklearn 1.5.
-shap==0.47.2
+shap==0.54.1
 # matplotlib: renders the SHAP and prediction plots; 3.10.1 has numpy 2 wheels for Python 3.11/3.12.
 matplotlib==3.10.1
 # requests: OpenWeather forecast calls; pinned so a retrain resolves the same HTTP stack; 2.33.0 fixes PYSEC-2026-1872 and PYSEC-2026-2275.
