@@ -5,8 +5,8 @@ name: Publish
 on:
   # Pushing a tag like v0.1.0 is an explicit, human decision to release.
   push:
-    # Only version tags; stray tags (e.g. experiment markers) do not release.
-    tags: ["v*"]
+    # Only strict vX.Y.Z tags; a stray or mistyped tag (vtest, v1) must not overwrite the public :latest.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 # Default every job to read-only; only the publish job is granted registry write.
 permissions:
@@ -21,6 +21,11 @@ jobs:
     steps:
       # The runner starts empty; tests need the source tree.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the ancestry check below can see origin/main.
+          fetch-depth: 0
+      # Only commits already on main (reviewed, CI-green) may publish; a tag on a local-only commit fails here.
+      - run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       # Pin to the Docker base (python:3.11-slim) so tests cover what ships.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:

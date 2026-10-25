@@ -150,19 +150,24 @@ merged_data = merged_data[
     merged_data["Driver"].isin(laps_2024["Driver"].unique())
 ]
 
-X = merged_data[
-    [
-        "QualifyingTime",
-        "RainProbability",
-        "Temperature",
-        "TeamPerformanceScore",
-        "CleanAirRacePace (s)"
-    ]
+# Named list so the same order is fitted on and saved in the artifact; must match the API's feature order.
+feature_cols = [
+    "QualifyingTime",
+    "RainProbability",
+    "Temperature",
+    "TeamPerformanceScore",
+    "CleanAirRacePace (s)"
 ]
+
+# Select by the saved list so training and the artifact can never disagree on columns.
+X = merged_data[feature_cols]
 
 y = laps_2024.groupby("Driver")["LapTime (s)"].mean().reindex(merged_data["Driver"])
 
-X = SimpleImputer(strategy="median").fit_transform(X)
+# Keep the fitted imputer in a variable so it ships in the artifact and the API imputes the same medians.
+imputer = SimpleImputer(strategy="median")
+# Wrap back into a DataFrame so XGBoost records feature names on the booster, as the committed pickle has.
+X = pd.DataFrame(imputer.fit_transform(X), columns=feature_cols, index=X.index)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.1, random_state=39
@@ -211,5 +216,12 @@ except Exception as e:
 
 # Save to standardized models directory
 os.makedirs("models", exist_ok=True)
-joblib.dump(model, "models/qatar_model.joblib")
+# Same dict shape as training/6.py and the committed pickle; a bare model would drop the imputer and feature list the API loads.
+artifact = {
+    "model": model,
+    "imputer": imputer,
+    "features": feature_cols
+}
+# Dump the dict, not the bare model, so a retrain keeps the committed artifact shape.
+joblib.dump(artifact, "models/qatar_model.joblib")
 print("models/qatar_model.joblib saved successfully")

@@ -18,11 +18,14 @@ RUN python -m venv /opt/venv
 # Why put the venv first on PATH: every later pip/python call installs into and runs from the venv, not system Python.
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Why copy requirements alone first: this layer (and the slow pip install) is cached until requirements.txt changes.
-COPY requirements.txt .
+# Why the lock, not requirements.txt: requirements.lock pins every transitive dep with sha256 hashes, so each build installs the exact same bytes.
+# Why copy it alone first: this layer (and the slow pip install) is cached until requirements.lock changes.
+COPY requirements.lock .
 
+# Why --require-hashes: pip refuses any artifact whose sha256 is not in the lock, so a tampered or re-uploaded wheel fails the build.
+# Why --no-deps: the lock is already complete, so nothing unlocked can sneak in through a dependency's metadata.
 # Why --no-cache-dir: wheel cache would only bloat this layer; all deps ship manylinux wheels so no compiler is needed.
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.lock
 
 # ---------- Stage 2: runtime ----------
 # Why the same base: the copied venv points at /usr/local/bin/python, which must exist at the same path.

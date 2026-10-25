@@ -14,7 +14,8 @@ from pathlib import Path
 # Anchor defaults to this file, not the CWD, so `uvicorn main:app` works from any folder
 REPO_ROOT = Path(__file__).resolve().parent
 
-# Models can live outside the image (mounted volume) on hosts that set MODELS_DIR
+# Models can live outside the image (mounted volume) on hosts that set MODELS_DIR.
+# joblib.load is pickle and runs code on load: the folder must be read-only and trusted, never user-writable.
 MODELS_DIR = Path(os.environ.get("MODELS_DIR", REPO_ROOT / "models"))
 
 # One source for the version so FastAPI's OpenAPI doc and /info cannot drift apart

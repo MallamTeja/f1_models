@@ -10,6 +10,9 @@ import os
 # time measures per-request latency reported back in the response meta
 import time
 
+# warnings scopes the one sklearn "no feature names" warning that is safe to silence at inference
+import warnings
+
 # asynccontextmanager turns the generator below into FastAPI's startup/shutdown hook
 from contextlib import asynccontextmanager
 
@@ -24,6 +27,9 @@ import numpy as np
 
 # FastAPI core: the app, HTTP errors for bad input, and the raw request for the 405 handler
 from fastapi import FastAPI, HTTPException, Request
+
+# Overriding the 422 handler needs the exception type FastAPI raises on body validation failure
+from fastapi.exceptions import RequestValidationError
 
 # JSONResponse lets handlers pick a status code (405 body, 503 health) without raising
 from fastapi.responses import JSONResponse
@@ -54,10 +60,10 @@ def load_model_artifact(file_path: str) -> Any | None:
     try:
         # Unpickle once; the object may be a dict bundle or a bare estimator
         artifact = joblib.load(file_path)
-        # usa/mexico were saved as {"model", "imputer"} bundles, so pass them through as-is
+        # usa/mexico/qatar were saved as {"model", "imputer", "features"} bundles, so pass them through as-is
         if isinstance(artifact, dict) and "model" in artifact:
             return artifact
-        # qatar/abudhabi are bare XGB models; wrap them so predict() sees one shape
+        # abudhabi is a bare XGB model; wrap it so predict() sees one shape
         return {"model": artifact, "imputer": None}
     # Unpickling can raise almost anything (version skew, truncated file), so catching broadly is the point
     except Exception as e:  # noqa: BLE001
@@ -88,8 +94,8 @@ async def lifespan(app: FastAPI):
             race_key = get_race_key_from_filename(path.name)
             # str() because the loader's contract is a plain path string
             artifact = load_model_artifact(str(path))
-            # Only register races whose pickle actually loaded
-            if artifact:
+            # Only register races whose pickle loaded AND whose recorded column order matches predict()
+            if artifact and feature_names_match(race_key, artifact):
                 # Make the model reachable by /predict
                 ml_models[race_key] = artifact
                 # Startup log line confirms which models a deploy actually has
@@ -107,6 +113,8 @@ async def lifespan(app: FastAPI):
     yield
     # Release model memory on shutdown and leave a clean slate for the next TestClient start
     ml_models.clear()
+    # Same reason for the lookup table: a restart must re-read it, never serve a stale copy
+    lookup_data.clear()
 
 
 # docs_url="/" puts Swagger on the root so the Render URL is self-describing
@@ -120,22 +128,48 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    # FastAPI's default 422 echoes "input"; a raw NaN/Infinity there makes JSONResponse raise -> 500.
+    # "ctx" can hold the original exception object (from a ValueError validator), also unserialisable.
+    # Dropping both keeps loc/msg/type, which is all a client needs to fix its request.
+    return JSONResponse(
+        # Still a client error; only the body shape is trimmed
+        status_code=422,
+        # Same top-level "detail" list FastAPI clients already parse
+        content={"detail": [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]},
+    )
+
+
 @app.exception_handler(405)
 async def method_not_allowed_handler(request: Request, exc):
-    # People hitting /predict from a browser send GET; tell them to POST instead of a bare 405
+    # Starlette's router puts the route's real methods in the Allow header (e.g. "POST" or "GET, HEAD")
+    allow = (getattr(exc, "headers", None) or {}).get("Allow")
+    # Name the right method per route, so POST /health is not told to "use POST"
+    if allow:
+        # Sorted for a stable message; "GET, HEAD" reads as "GET or HEAD"
+        methods = " or ".join(sorted(m.strip() for m in allow.split(",")))
+        # Keep the "requires a X request" wording browsers hitting GET /predict already see
+        message = f"Custom Error: This endpoint requires a {methods} request."
+    else:
+        # No Allow header to read; say only what is certain rather than guess a method
+        message = "Custom Error: This HTTP method is not allowed for this endpoint."
+    # Body keys unchanged so existing clients parsing status/message/path keep working
     return JSONResponse(
         status_code=405,
         content={
             "status": "error",
-            "message": "Custom Error: This endpoint requires a POST request. Please send a JSON body using the POST method.",
+            "message": message,
             "path": request.url.path,
         },
     )
 
 
 class PredictionInput(BaseModel):
-    # Free-form race name; the validator below maps aliases to the 4 model keys
-    race_name: str = Field(description="Race name: 'abudhabi', 'qatar', 'usa', or 'mexico'")
+    # Free-form race name; the validator below maps aliases to the 4 model keys.
+    # max_length caps the input before the validator echoes it into the error message;
+    # 32 is well above the longest alias ("united_states", 13 chars)
+    race_name: str = Field(max_length=32, description="Race name: 'abudhabi', 'qatar', 'usa', or 'mexico'")
     # F1 codes are always 3 letters; enforce it before the lookup table check
     driver_code: str = Field(min_length=3, max_length=3, description="3-letter F1 driver code")
     # Coarse sanity bound; per-race ranges are enforced in predict()
@@ -172,8 +206,63 @@ class PredictionInput(BaseModel):
         )
 
 
+# usa/mexico column order, exactly as recorded in each bundle's "features" and the fitted estimators
+_USA_MEXICO_FEATURES = (
+    "QualifyingTime (s)",
+    "CleanAirRacePace (s)",
+    "TeamPerformanceScore",
+    "TotalSectorTime (s)",
+    "RainProbability",
+)
+# abudhabi/qatar column order; names are qatar's recorded ones (abudhabi's pickle records none)
+_XGB_FEATURES = ("QualifyingTime", "RainProbability", "Temperature", "TeamPerformanceScore", "CleanAirRacePace (s)")
+# Race key -> the column order predict() builds below; one table so the load check and the row builder cannot drift
+EXPECTED_FEATURES = {
+    "usa": _USA_MEXICO_FEATURES,
+    "mexico": _USA_MEXICO_FEATURES,
+    "qatar": _XGB_FEATURES,
+    "abudhabi": _XGB_FEATURES,
+}
+
+
+def feature_names_match(race_key: str, artifact: dict) -> bool:
+    """Reject an artifact whose recorded feature names differ from the order predict() builds."""
+    # Races predict() never serves have no row layout to compare against, so nothing to enforce
+    expected = EXPECTED_FEATURES.get(race_key)
+    # Unknown key: let it load as before; the race-name validator already keeps it unreachable
+    if expected is None:
+        return True
+    # Estimator whose fitted column names we compare
+    model = artifact.get("model")
+    # Every place an artifact can record column names; None means "this part recorded nothing"
+    recorded = [
+        # Training scripts store the order explicitly in dict bundles
+        artifact.get("features"),
+        # sklearn records the fit-time DataFrame columns on the imputer
+        getattr(artifact.get("imputer"), "feature_names_in_", None),
+        # ...and on sklearn estimators (and XGBRegressor's sklearn wrapper)
+        getattr(model, "feature_names_in_", None),
+    ]
+    # XGB keeps its own copy in the booster; abudhabi's is None, so it is skipped below
+    if hasattr(model, "get_booster"):
+        # Booster names are what XGB itself would validate against a DMatrix
+        recorded.append(model.get_booster().feature_names)
+    # Every recorded list must equal the expected order, or the numpy row would feed columns into the wrong slots
+    for names in recorded:
+        # tuple() normalises list / numpy array so == compares element-wise in order
+        if names is not None and tuple(names) != expected:
+            # Error level: a mis-ordered model silently returns wrong paces, worse than a missing one
+            logger.error("Skipping %s: artifact features %s != expected %s", race_key, list(names), list(expected))
+            # Caller skips this race; /predict then answers 500 "not loaded" instead of a wrong number
+            return False
+    # All recorded names agree (or none were recorded, as for abudhabi)
+    return True
+
+
+# Plain def (not async): sklearn/xgboost inference is blocking CPU work, so FastAPI runs it
+# in the threadpool instead of stalling the event loop for every other request
 @app.post("/predict")
-async def predict(input_data: PredictionInput):
+def predict(input_data: PredictionInput):
     # Start the clock first so reported latency covers validation-to-response
     start_time = time.time()
     # Already normalised by the validator to one of the 4 keys
@@ -187,7 +276,7 @@ async def predict(input_data: PredictionInput):
 
     # The estimator itself (sklearn pipeline or XGBRegressor)
     model = artifact["model"]
-    # usa/mexico need TotalSectorTime imputed; bare XGB models carry None
+    # usa/mexico/qatar bundles carry a fitted imputer; the bare abudhabi XGB model carries None
     imputer = artifact.get("imputer")
 
     # Driver -> team score map; empty if lookup file was missing
@@ -258,12 +347,19 @@ async def predict(input_data: PredictionInput):
 
     # Any model-side failure becomes a 500 with the reason, not an unhandled crash
     try:
-        # Fill the NaN TotalSectorTime column for models that were trained with an imputer
-        if imputer:
-            features = imputer.transform(features)
+        # Rows are numpy (pandas is not in the image), so sklearn warns "no valid feature names" on every call.
+        # Column order is verified against the artifact at load (feature_names_match), so that warning is noise.
+        # ponytail: catch_warnings swaps the process-global filter list, so concurrent requests can leak this
+        # one ignore filter past the block; harmless for this message, use Python 3.14 context-aware warnings if it matters
+        with warnings.catch_warnings():
+            # Silence only this exact sklearn message; every other warning still surfaces
+            warnings.filterwarnings("ignore", message="X does not have valid feature names", category=UserWarning)
+            # Fill the NaN TotalSectorTime column for models that were trained with an imputer
+            if imputer:
+                features = imputer.transform(features)
 
-        # All loaded models expose sklearn-style predict(); take the single row's value
-        prediction = model.predict(features)[0]
+            # All loaded models expose sklearn-style predict(); take the single row's value
+            prediction = model.predict(features)[0]
         # Label kept identical to previous releases; clients and tests key off it
         if race in ["abudhabi", "qatar"] and "xgboost" in str(type(model)).lower():
             model_info = f"{race}_xgb_v2"
@@ -281,8 +377,10 @@ async def predict(input_data: PredictionInput):
         }
     # Model internals can raise any type; all of them must map to one 500 shape
     except Exception as e:
-        # Surface the reason so a broken model is diagnosable from the client side
-        raise HTTPException(status_code=500, detail=f"Prediction error: {e}") from e
+        # Full traceback goes to server logs, where the operator can diagnose it
+        logger.exception("Prediction failed for race %s", race)
+        # Generic client message: library internals (paths, versions, shapes) must not leak
+        raise HTTPException(status_code=500, detail="Prediction failed") from e
 
 
 @app.get("/info", include_in_schema=False)

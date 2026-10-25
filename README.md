@@ -25,7 +25,7 @@ A FastAPI service that predicts a driver's race pace (seconds per lap) for four 
 |-----------|-----------------------|---------------------------------|-----------------------------|
 | Mexico    | `training/6.py`       | `models/mexico_model.joblib`    | GradientBoostingRegressor + SimpleImputer |
 | USA       | `training/8-1.py`     | `models/us_model.joblib`        | GradientBoostingRegressor + SimpleImputer |
-| Qatar     | `training/10-3.py`    | `models/qatar_model.joblib`     | XGBRegressor (monotone constraints) |
+| Qatar     | `training/10-3.py`    | `models/qatar_model.joblib`     | XGBRegressor (monotone constraints) + SimpleImputer |
 | Abu Dhabi | `training/12-3.py`    | `models/abu_dhabi_model.joblib` | XGBRegressor (monotone constraints) |
 
 `training/12.py` and `training/17.py` (Keras FFN → `models/abu_dhabi_ffnmodel.keras`) are experiments; the API does not load their output. `models/shap_*.png` are SHAP feature-importance plots written by the training scripts.
@@ -52,7 +52,7 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt  # API + test/lint tools
 ```
 
-> **Dependency pins matter.** The committed pickles only load with `scikit-learn==1.5.2`, `numpy==2.2.6` and `xgboost==3.2.0` (scikit-learn 1.8 fails with `AttributeError`, numpy < 2 cannot read them). Do not bump these without retraining every model. Dependabot is configured to skip them.
+> **Dependency pins matter.** `requirements.txt` is the human-edited source; the Docker image installs `requirements.lock`, a fully resolved, hash-verified copy for Linux/Python 3.11 (regenerate command is in its header). The committed pickles only load with `scikit-learn==1.5.2`, `numpy==2.2.6` and `xgboost==3.2.0` (scikit-learn 1.8 fails with `AttributeError`, numpy < 2 cannot read them). Do not bump these without retraining every model. Dependabot is configured to skip them.
 
 ## Run the API
 
@@ -108,7 +108,7 @@ python training/train_all.py               # retrain all four
 
 ## Docker
 
-The image is multi-stage, runs as a non-root user, contains only `main.py`, `config.py`, `requirements.txt` and the served models, and has a `HEALTHCHECK` on `/health`.
+The image is multi-stage, runs as a non-root user, contains only `main.py`, `config.py` and the served models, and has a `HEALTHCHECK` on `/health`.
 
 ```bash
 docker build -t f1_models:local .
@@ -124,21 +124,21 @@ Override the port with `-e PORT=9000 -p 9000:9000`. Models are baked into the im
 | Workflow | Trigger | Does |
 |----------|---------|------|
 | `.github/workflows/ci.yml` | PR and push to `main` | ruff, pytest, Docker build (not pushed), container smoke test of `/health` + `/predict` |
-| `.github/workflows/publish.yml` | tag `v*` | tests, then build and push `ghcr.io/mallamteja/f1_models:<tag>` and `:latest` using `GITHUB_TOKEN` |
+| `.github/workflows/publish.yml` | tag `vX.Y.Z` on a commit in `main` | tests, then build and push `ghcr.io/mallamteja/f1_models:<tag>` and `:latest` using `GITHUB_TOKEN` |
 
 Third-party actions are pinned to commit SHAs; Dependabot keeps them current.
 
 ### Release checklist
 
 1. `main` is green in CI.
-2. Bump `APP_VERSION` in `config.py` if the API changed, commit, push, wait for green.
-3. Tag and push:
+2. Bump `APP_VERSION` in `config.py` if the API changed, commit, push, wait for green. If `requirements.txt` changed, regenerate `requirements.lock` first.
+3. Tag the commit on `main` and push (only strict `vX.Y.Z` tags publish, and the workflow refuses commits that are not on `main`):
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
    ```
 4. Watch the **Publish** workflow in the Actions tab.
-5. First release only: GitHub → your profile → Packages → `f1_models` → Package settings → set visibility to **Public** if others should pull without logging in.
+5. The package is public (inherited from the public repo), so anyone can pull it without logging in.
 6. Verify: `docker run --rm -p 8000:8000 ghcr.io/mallamteja/f1_models:v0.1.0`, then `curl localhost:8000/health`.
 
 ## Deployment
@@ -148,7 +148,6 @@ The live site at <https://f1predictor.tech> is hosted on Render using `render.ya
 ## Known limitations
 
 - `models/us_model.joblib` was pickled with scikit-learn 1.8.0 and loads under 1.5.2 with an `InconsistentVersionWarning`; its output is identical to 1.8.0 on the test input and is pinned by a regression test. Retraining it under 1.5.2 removes the warning.
-- Weather inputs are a single constant per training run, so `rain_prob` and `temperature` barely move predictions.
 - Each training set has ~20 drivers; reported MAE comes from ~2 test rows and is not a reliable quality measure.
 
 ---

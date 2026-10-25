@@ -10,6 +10,9 @@
 # Why: the builder stage installs prod deps from it.
 !requirements.txt
 
+# Why: the builder stage installs this hash-pinned lock; requirements.txt stays as its human-edited source.
+!requirements.lock
+
 # Why: the trained models the API loads; .keras and .png in models/ stay excluded.
 !models/*.joblib
 
