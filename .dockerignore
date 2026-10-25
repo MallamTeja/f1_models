@@ -1,19 +1,17 @@
-__pycache__/
-*.pyc
-.env
-.venv/
-build/
-venv/
-f1_cache/
-fastf1_cache/
-.git/
-.github/
-.pytest_cache/
-tests/
-training/
-visulizations&reports/
-README.md
-CONTRIBUTING.md
-LICENSE
-SECURITY.md
-CODE_OF_CONDUCT.md
+# Why whitelist style: ignore everything first, so a new secret (.env), dataset or notebook can never leak into the build context by default.
+*
+
+# Why: the FastAPI entrypoint (ASGI target main:app).
+!main.py
+
+# Why: settings module imported by main.py at startup.
+!config.py
+
+# Why: the builder stage installs prod deps from it.
+!requirements.txt
+
+# Why: the trained models the API loads; .keras and .png in models/ stay excluded.
+!models/*.joblib
+
+# Why: lookup tables the API reads alongside the models.
+!models/lookup_data.json

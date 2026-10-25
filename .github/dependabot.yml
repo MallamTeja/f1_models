@@ -1,12 +1,54 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
-
+# Dependabot opens PRs for stale dependencies so security fixes arrive without manual tracking.
+# Options reference: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Schema v2 is the only version GitHub accepts.
 version: 2
+# One entry per ecosystem; each is scanned and bumped independently.
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Python deps in requirements*.txt carry the API's runtime and test tooling.
+  - package-ecosystem: "pip"
+    # requirements.txt and requirements-dev.txt live at the repo root.
+    directory: "/"
+    # Weekly batches PRs into a reviewable rhythm instead of daily noise.
     schedule:
+      # Matches the other ecosystems so all bumps arrive together.
       interval: "weekly"
+    # The committed model pickles only load with the exact versions they were trained with
+    # (e.g. scikit-learn 1.8 cannot load them). Bumping any of these must be a deliberate
+    # retrain + re-export, never an automated PR.
+    ignore:
+      # Pickled estimators are tied to the sklearn version that wrote them.
+      - dependency-name: "scikit-learn"
+      # Array layout inside the pickles depends on numpy's ABI.
+      - dependency-name: "numpy"
+      # sklearn's pickled internals reference scipy objects.
+      - dependency-name: "scipy"
+      # XGBoost boosters are serialized in a version-specific format.
+      - dependency-name: "xgboost"
+      # CPU-only XGBoost wheel, same serialization constraint as xgboost.
+      - dependency-name: "xgboost-cpu"
+      # joblib wrote the pickle files; its reader must match.
+      - dependency-name: "joblib"
+
+  # Action versions in .github/workflows; bumps bring security fixes and runtime (Node) updates.
+  - package-ecosystem: "github-actions"
+    # Dependabot looks in .github/workflows under this root.
+    directory: "/"
+    # Weekly is plenty; actions release slowly.
+    schedule:
+      # Same cadence as pip.
+      interval: "weekly"
+
+  # The Dockerfile's base image (python:3.11-slim) gets OS security patches this way.
+  - package-ecosystem: "docker"
+    # Dockerfile lives at the repo root.
+    directory: "/"
+    # Weekly picks up rebuilt slim images with patched OS packages.
+    schedule:
+      # Same cadence as the others.
+      interval: "weekly"
+    # CI and the wheels are pinned to Python 3.11; a 3.12+ base must be a deliberate change.
+    ignore:
+      # The official python image is the only base in the Dockerfile.
+      - dependency-name: "python"
+        # Block 3.11 -> 3.12/4.x jumps; patch/digest refreshes still come through.
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

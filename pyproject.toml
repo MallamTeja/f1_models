@@ -1,0 +1,26 @@
+# Tool configuration only; this repo is an app, not a package, so there is no [project] table.
+
+[tool.pytest.ini_options]
+# Only collect real tests; keeps pytest away from training/ notebooks and scripts
+testpaths = ["tests"]
+# Puts the repo root on sys.path so tests can `import main` and `import config`
+pythonpath = ["."]
+
+[tool.ruff]
+# Match the Python version the Docker image runs, so ruff flags syntax that would break there
+target-version = "py311"
+# 120 fits the existing long Field(...) and error-message lines without awkward wrapping
+line-length = 120
+# Skip legacy training scripts and manual benchmark/inspection scripts that are not part of the app
+extend-exclude = [
+    # Offline model-training code, not served by the API
+    "training",
+    # Report/plot generation, not served by the API
+    "visulizations&reports",
+    # Manual load-testing script that hits a live server
+    "tests/inferencetest.py",
+    # Manual throughput benchmark against a live server
+    "tests/throughputtest.py",
+    # One-off pickle inspection helper
+    "tests/inspect_model.py",
+]

@@ -1,10 +1,42 @@
+# Python bytecode: regenerated on every run, machine-specific
 __pycache__/
-*.pyc
-.env
+*.py[cod]
 
+# Virtual environments: rebuilt from requirements*.txt, never shared
 .venv/
-build/
 venv/
-f1_cache/
+env/
+
+# Build outputs: produced by tooling, not source
+build/
+dist/
+*.egg-info/
+
+# Test and lint caches: local speed-ups only
 .pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter checkpoints: autosave copies that duplicate the real notebooks
+.ipynb_checkpoints/
+
+# Secrets: real keys live only in a local .env (template is .env.example)
+.env
+.env.*
+!.env.example
+
+# FastF1 download caches: large, re-fetchable from the FastF1 API
+f1_cache/
 fastf1_cache/
+
+# Stray model outputs from experiments: only the 4 served artifacts
+# plus lookup_data.json are committed deliberately under models/
+*.joblib
+*.keras
+!models/*.joblib
+!models/*.keras
+
+# OS and editor noise
+.DS_Store
+Thumbs.db

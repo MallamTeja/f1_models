@@ -1,0 +1,9 @@
+# Pull in the exact production set first so tests run against what ships
+-r requirements.txt
+
+# Test runner used by `python -m pytest`
+pytest==9.1.1
+# FastAPI's TestClient is built on httpx, so tests cannot import it without this
+httpx==0.28.1
+# Linter + formatter; config lives in pyproject.toml [tool.ruff]
+ruff==0.17.2

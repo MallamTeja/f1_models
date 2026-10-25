@@ -1,0 +1,94 @@
+# Publish the container to GHCR only for deliberate releases, so the registry holds versioned, tested images.
+name: Publish
+
+# Tags are the release signal; branch pushes must never publish.
+on:
+  # Pushing a tag like v0.1.0 is an explicit, human decision to release.
+  push:
+    # Only version tags; stray tags (e.g. experiment markers) do not release.
+    tags: ["v*"]
+
+# Default every job to read-only; only the publish job is granted registry write.
+permissions:
+  # Checkout is all the test job needs.
+  contents: read
+
+jobs:
+  # Re-run the test suite on the tagged commit, so a broken tag can never publish.
+  test:
+    # Same runner OS as CI, so results match.
+    runs-on: ubuntu-latest
+    steps:
+      # The runner starts empty; tests need the source tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Pin to the Docker base (python:3.11-slim) so tests cover what ships.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # Same minor version as the container image.
+          python-version: "3.11"
+          # Reuse wheel downloads across runs.
+          cache: pip
+          # Invalidate the cache only when pins change.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      # Dev file includes prod pins via -r, so one install covers both.
+      - run: pip install -r requirements-dev.txt
+      # Lint gate, same as CI, so a release cannot skip a check main enforces.
+      - run: ruff check .
+      # Format gate, scoped to the files CI checks.
+      - run: ruff format --check main.py config.py tests/test_main.py
+      # Behaviour gate; a red suite blocks the publish job via `needs`.
+      - run: pytest -q
+
+  # Build and push the release image once tests pass.
+  publish:
+    # Without this, a broken tag would still publish.
+    needs: test
+    # Docker Engine and Buildx support are preinstalled here.
+    runs-on: ubuntu-latest
+    # Grant registry write only to the job that pushes (least privilege).
+    permissions:
+      # Checkout still needs read access.
+      contents: read
+      # GITHUB_TOKEN needs this scope to push to ghcr.io.
+      packages: write
+    steps:
+      # Build context is the tagged commit's tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Buildx is required for the GHA layer cache backend.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Authenticate to GHCR with the built-in token; no long-lived PAT to leak or rotate.
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          # GHCR, not Docker Hub, keeps the image next to the repo with no extra account.
+          registry: ghcr.io
+          # The token is issued for whoever triggered the run.
+          username: ${{ github.actor }}
+          # Short-lived per-run token, scoped by the job's permissions block.
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Generate tags and OCI labels in one place instead of hand-building strings.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          # Hardcoded lowercase: registries reject uppercase, and github.repository could carry it.
+          images: ghcr.io/mallamteja/f1_models
+          # Owner asked for exactly :<tag> (e.g. :v0.1.0) and :latest, not semver-split tags.
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+      # Build once and push both tags.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          # Use the checked-out tree so model files come from checkout, same as CI.
+          context: .
+          # This is the release; pushing is the point.
+          push: true
+          # Tags computed above, so naming rules live in one step.
+          tags: ${{ steps.meta.outputs.tags }}
+          # OCI labels link the package page back to this repo and commit.
+          labels: ${{ steps.meta.outputs.labels }}
+          # Reuse layers CI already built, so releases are fast.
+          cache-from: type=gha
+          # Save all stages so the next release reuses them too.
+          cache-to: type=gha,mode=max

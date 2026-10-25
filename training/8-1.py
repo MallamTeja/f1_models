@@ -18,7 +18,7 @@ if not os.path.exists(cache_dir):
     os.makedirs(cache_dir, exist_ok=True)
 fastf1.Cache.enable_cache(cache_dir)
 
-OPENWEATHER_API = os.getenv("OPENWEATHER_API")
+OPENWEATHER_API = os.getenv("openweatherapi") or os.getenv("OPENWEATHER_API")  # same lookup as 6.py, so one openweatherapi key in .env serves every live script
 LAT, LON = 30.1328, -97.6411
 FORECAST_TIME = "2025-10-19 14:00:00"
 

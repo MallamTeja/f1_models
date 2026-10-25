@@ -1,0 +1,113 @@
+# Gate every change on lint, tests and a real container boot, so main never holds an image that cannot serve.
+name: CI
+
+# Run on PRs to catch breakage before merge, and on main to prove the merged result still holds.
+on:
+  # PRs are where review happens, so feedback must land there.
+  pull_request:
+  # Merges can combine two green PRs into a red main; re-check after merging.
+  push:
+    # Only main matters; feature-branch pushes are already covered by their PR.
+    branches: [main]
+
+# CI only reads code; a read-only token limits damage if a step or action is compromised.
+permissions:
+  # Checkout is the only thing that needs repo access.
+  contents: read
+
+# A newer push makes the older run's answer irrelevant; cancelling it saves runner minutes.
+concurrency:
+  # One lane per workflow + branch/PR, so unrelated branches never cancel each other.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Kill the superseded run instead of queueing behind it.
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback first: lint and unit tests fail in seconds, before paying for a Docker build.
+  test:
+    # Ubuntu matches the Linux base of the Docker image, so test results transfer.
+    runs-on: ubuntu-latest
+    steps:
+      # The runner starts empty; tests need the source tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Pin the interpreter to the Docker base (python:3.11-slim) so CI tests what ships.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # Same minor version as the container; pickles and wheels behave identically.
+          python-version: "3.11"
+          # Re-downloading xgboost/sklearn wheels every run is slow; reuse them.
+          cache: pip
+          # Bust the cache when either prod or dev pins change, not on unrelated edits.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      # Dev file pulls in prod pins via -r, so one install gives app + test tooling.
+      - run: pip install -r requirements-dev.txt
+      # Catch real bugs (unused names, bad imports) before running anything.
+      - run: ruff check .
+      # Only these files are ruff-formatted today; checking the rest would fail on legacy code.
+      - run: ruff format --check main.py config.py tests/test_main.py
+      # Behaviour check; config (testpaths, pythonpath) lives in pyproject.toml so local and CI match.
+      - run: pytest -q
+
+  # Unit tests can pass while the image fails to build or boot; this proves the shipped artifact works.
+  docker:
+    # Building is pointless if the code is already known broken.
+    needs: test
+    # Docker Engine is preinstalled on Ubuntu runners.
+    runs-on: ubuntu-latest
+    steps:
+      # Build context is the local checkout, so the image matches the commit under test.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Buildx is required for the GHA layer cache backend.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Build without pushing: CI validates, only tagged releases publish.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          # Use the checked-out tree rather than a remote Git context, so LFS/model files come from checkout.
+          context: .
+          # CI must never publish; that is publish.yml's job on tags.
+          push: false
+          # Load into the local daemon so the smoke test can `docker run` it.
+          load: true
+          # Local-only name; nothing outside this job sees it.
+          tags: f1_models:ci
+          # Reuse layers from earlier runs so the pip-install layer is not rebuilt every time.
+          cache-from: type=gha
+          # Save all layers (mode=max) so multi-stage intermediate layers are cached too.
+          cache-to: type=gha,mode=max
+      # Start the container the same way production does, mapping the API port.
+      - run: docker run -d --name f1_models_ci -p 8000:8000 f1_models:ci
+      # Model loading takes time at startup; poll instead of a fixed sleep so fast boots finish fast.
+      - name: Wait for /health
+        # Fail the step if the API never comes up within 60s.
+        run: |
+          # 60 one-second attempts = the 60s budget.
+          for i in $(seq 1 60); do
+            # -f turns HTTP errors into a non-zero exit, so only a healthy 2xx breaks the loop.
+            if curl -fsS http://localhost:8000/health; then exit 0; fi
+            # Give uvicorn and the model loader time before retrying.
+            sleep 1
+          done
+          # Reaching here means the API never became healthy.
+          echo "API not healthy after 60s" >&2
+          # Non-zero exit fails the job.
+          exit 1
+      # /health only proves the server is up; a real prediction proves the model pickles load and run.
+      - name: Smoke-test /predict
+        # Capture the status code so a 4xx/5xx fails the job with the body shown.
+        run: |
+          # Write body to a file and print only the status code, so both are available.
+          code=$(curl -sS -o body.json -w '%{http_code}' -X POST http://localhost:8000/predict \
+            -H 'Content-Type: application/json' \
+            -d '{"race_name":"abudhabi","driver_code":"VER","qualifying_time":82.2,"clean_air_race_pace":91.1,"rain_prob":0,"temperature":25}')
+          # Show the response either way, so a failure is debuggable from the log alone.
+          cat body.json
+          # Anything but 200 means the model path is broken.
+          test "$code" = "200"
+      # On failure, the container's own output is the only clue to why it crashed.
+      - name: Container logs on failure
+        # Skip on success to keep green logs short.
+        if: failure()
+        # Print uvicorn and model-loading errors.
+        run: docker logs f1_models_ci
